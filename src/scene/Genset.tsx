@@ -201,8 +201,8 @@ function Radiator() {
       <Box s={[0.36, 1.95, 2.0]} m={M.black} position={[-2.66, 1.42, 0]} />
       <Box s={[0.38, 0.04, 2.0]} m={M.steel} position={[-2.66, 0.95, 0]} />
       {/* breaker / charger box on the operator side of the radiator frame */}
-      <Box s={[0.2, 0.55, 0.5]} r={0.01} m={M.white} position={[-2.25, 1.6, 0.86]} />
-      <Box s={[0.01, 0.12, 0.2]} m={M.black} position={[-2.145, 1.7, 0.86]} />
+      <Box s={[0.42, 0.55, 0.18]} r={0.01} m={M.white} position={[-2.6, 1.6, 1.19]} />
+      <Box s={[0.18, 0.1, 0.01]} m={M.black} position={[-2.6, 1.72, 1.285]} />
       <Cyl r={0.06} l={0.06} m={M.steel} position={[-2.6, 2.57, 0.7]} />
       <Box s={[0.3, 0.25, 0.5]} r={0.03} m={M.black} position={[-2.4, 2.62, -0.6]} />
       {[-1, 1].map((s) => (
@@ -430,8 +430,8 @@ function Engine() {
           )),
         )}
         <Box s={[0.18, 0.1, 0.01]} m={M.steel} position={[-0.2, 1.3, 0.556]} />
-        {[-1.75, 0.55].map((x) => (
-          <mesh key={x} material={M.yellow} position={[x, 2.18, 0]} rotation={[0, Math.PI / 2, 0]}>
+        {[-1.75, -0.3].map((x) => (
+          <mesh key={x} material={M.yellow} position={[x, 2.25, 0]} rotation={[0, Math.PI / 2, 0]}>
             <torusGeometry args={[0.07, 0.02, 8, 16]} />
           </mesh>
         ))}
@@ -474,16 +474,16 @@ function Engine() {
         <Box s={[0.3, 0.2, 0.6]} r={0.03} m={M.teal} position={[-1.85, 2.0, 0]} />
       </Part>
       <Assembled>
-        <Pipe pts={[[-1.85, 2.08, 0.15], [-2.05, 2.18, 0.35], [-2.3, 2.3, 0.5]]} r={0.075} m={M.rubber} />
         {/* two big arching pipes from the front of the engine into the top of the radiator */}
         {[-1, 1].map((s) => (
-          <Pipe key={s} pts={[[-1.55, 2.02, s * 0.32], [-1.75, 2.45, s * 0.4], [-2.05, 2.62, s * 0.42], [-2.33, 2.56, s * 0.42], [-2.42, 2.45, s * 0.42]]} r={0.085} m={M.black} />
+          <Pipe key={s} pts={[[-1.85, 2.1, s * 0.2], [-1.95, 2.42, s * 0.3], [-2.12, 2.6, s * 0.36], [-2.36, 2.56, s * 0.38], [-2.42, 2.46, s * 0.38]]} r={0.085} m={M.black} />
         ))}
-        <Pipe pts={[[-2.02, 1.5, -0.38], [-2.2, 0.75, -0.6], [-2.38, 0.6, -0.7]]} r={0.075} m={M.rubber} />
-        <Pipe pts={[[-1.4, 1.92, 0.2], [-1.95, 1.75, 0.65], [-2.38, 1.1, 0.8]]} r={0.055} m={M.rubber} />
-        <Pipe pts={[[-1.4, 1.92, -0.2], [-1.95, 1.7, -0.65], [-2.38, 0.95, -0.82]]} r={0.055} m={M.rubber} />
-        <Pipe pts={[[-1.8, 2.12, 0.12], [-0.8, 2.14, 0.14], [0.2, 2.12, 0.12], [0.5, 1.95, 0.25]]} r={0.025} m={M.rubber} />
-        <Pipe pts={[[-1.8, 2.12, -0.12], [-0.8, 2.14, -0.14], [0.2, 2.12, -0.12], [0.3, 1.5, -0.62]]} r={0.025} m={M.rubber} />
+        <Pipe pts={[[-2.02, 1.38, -0.38], [-1.98, 0.85, -0.5], [-2.12, 0.46, -0.55], [-2.4, 0.44, -0.6]]} r={0.075} m={M.rubber} />
+        {[-1, 1].map((s) => (
+          <Pipe key={s} pts={[[-1.4, 1.95, s * 0.22], [-1.6, 1.9, s * 0.8], [-2.0, 1.4, s * 1.0], [-2.38, 1.0, s * 0.98]]} r={0.055} m={M.rubber} />
+        ))}
+        <Pipe pts={[[-1.6, 2.06, 0.2], [-0.8, 2.08, 0.21], [0.15, 2.06, 0.2], [0.4, 1.95, 0.3]]} r={0.025} m={M.rubber} />
+        <Pipe pts={[[-1.6, 2.06, -0.2], [-0.8, 2.08, -0.21], [0.15, 2.06, -0.2], [0.3, 1.5, -0.62]]} r={0.025} m={M.rubber} />
       </Assembled>
 
       {/* side equipment */}
@@ -537,20 +537,23 @@ function Engine() {
             <torusGeometry args={[0.165, 0.012, 6, 32]} />
           </mesh>
         ))}
-        <Cyl r={0.24} l={0.03} m={M.steel} position={[0.74, 2.56, 0]} />
-        <BoltRing r={0.2} n={10} m={M.cast} position={[0.74, 2.58, 0]} rotation={[0, 0, Math.PI / 2]} />
+        <Cyl r={0.2} l={0.03} m={M.steel} position={[0.74, 2.56, 0]} />
+        <BoltRing r={0.17} n={10} m={M.cast} position={[0.74, 2.58, 0]} rotation={[0, 0, Math.PI / 2]} />
       </Part>
       <Part id="aftercooler" o2={[0, 1.55, 0]}>
-        <Box s={[1.6, 0.26, 0.36]} r={0.03} m={M.tealDark} position={[-0.7, 1.92, 0]} />
+        {/* sits above the two intake manifolds in the vee */}
+        <Box s={[1.6, 0.2, 0.3]} r={0.03} m={M.tealDark} position={[-0.7, 2.05, 0]} />
         {[-1.3, -0.1].map((x) => (
-          <Cyl key={x} r={0.04} l={0.3} axis="z" m={M.steel} position={[x, 1.92, 0]} />
+          <Cyl key={x} r={0.035} l={0.34} axis="z" m={M.steel} position={[x, 2.05, 0]} />
         ))}
       </Part>
     </group>
   );
 }
 
-const FILTER_X = [-0.05, 0.4, 0.85, 1.3];
+// Two pairs with a gap between them for the exhaust outlet (x 0.74).
+const FILTER_X = [-0.12, 0.3, 1.18, 1.6];
+const FILTER_Y = 2.5;
 
 function AirCleaners() {
   // Four dry filters lying across the engine above the flywheel end, one per turbo, on a black cradle.
@@ -558,14 +561,14 @@ function AirCleaners() {
     <group>
       {[-1, 1].map((s) => (
         <group key={s}>
-          <Box s={[1.75, 0.08, 0.08]} m={M.black} position={[0.62, 2.12, s * 0.3]} />
-          {[0.0, 1.25].map((x) => (
-            <Box key={x} s={[0.08, 0.32, 0.08]} m={M.black} position={[x, 1.98, s * 0.3]} rotation={[s * 0.35, 0, 0]} />
+          <Box s={[2.0, 0.06, 0.06]} m={M.black} position={[0.74, FILTER_Y - 0.22, s * 0.28]} />
+          {[-0.25, 1.73].map((x) => (
+            <Box key={x} s={[0.06, 0.5, 0.06]} m={M.black} position={[x, FILTER_Y - 0.45, s * 0.28]} />
           ))}
         </group>
       ))}
       {FILTER_X.map((x) => (
-        <group key={x} position={[x, 2.36, 0]}>
+        <group key={x} position={[x, FILTER_Y, 0]}>
           <Cyl r={0.2} l={0.62} axis="z" m={M.black} />
           {[-1, 1].map((s) => (
             <group key={s}>
@@ -578,9 +581,12 @@ function AirCleaners() {
         </group>
       ))}
       <Assembled>
-        {FILTER_X.map((x, i) => (
-          <Pipe key={x} pts={[[x, 2.2, 0], [x * 0.7 + 0.2, 2.1, i % 2 ? -0.35 : 0.35], [i < 2 ? 0.55 : 0.92, 2.12, i % 2 ? -0.64 : 0.64]]} r={0.075} m={M.rubber} />
-        ))}
+        {FILTER_X.map((x, i) => {
+          // each filter feeds the compressor inlet of one turbo (inlets face the middle of the vee)
+          const tx = i < 2 ? 0.55 : 0.92;
+          const tz = i % 2 ? -0.12 : 0.12;
+          return <Pipe key={x} pts={[[x, FILTER_Y - 0.2, tz * 0.5], [(x + tx) / 2, FILTER_Y - 0.3, tz], [tx, 2.14, tz]]} r={0.06} m={M.rubber} />;
+        })}
       </Assembled>
     </group>
   );
@@ -665,8 +671,8 @@ function Alternator() {
           </group>
         ))}
         <Part id="terminal" o2={[0, 0.6, 0]}>
-          <Box s={[0.9, 0.78, 1.0]} r={0.02} m={M.alt} position={[1.62, 2.05, 0]} />
-          <Box s={[0.82, 0.04, 0.92]} m={M.black} position={[1.62, 2.45, 0]} />
+          <Box s={[0.9, 0.52, 1.0]} r={0.02} m={M.alt} position={[1.62, 1.95, 0]} />
+          <Box s={[0.82, 0.04, 0.92]} m={M.black} position={[1.62, 2.21, 0]} />
           {/* cable gland plate and louvre on the side */}
           <Box s={[0.5, 0.2, 0.02]} m={M.black} position={[1.62, 1.85, 0.505]} />
           {[0, 1, 2, 3].map((i) => (
