@@ -20,8 +20,15 @@ import {
   fillDayTank,
   LIMIT_KW as UNIT_MAX_KW,
   motorStart,
+  FUEL_RP,
+  PLN_RP,
   resetUnit,
   SCENARIOS,
+  SERVICE_H,
+  SERVICE_RP,
+  setWeather,
+  startService,
+  type Weather,
   setEStop,
   shipArrives,
   startScenario,
@@ -474,6 +481,21 @@ function UnitDetail() {
           ⛽ Isi penuh
         </button>
       </div>
+      <h2>Servis</h2>
+      <div className="p-svc">
+        <div className="p-tank">
+          <em
+            style={{
+              width: `${Math.min(1, u.sinceService / SERVICE_H) * 100}%`,
+              background: u.sinceService > SERVICE_H * 1.2 ? '#e0533c' : u.sinceService > SERVICE_H ? '#e0a33c' : '#3fa06a',
+            }}
+          />
+          <span>{u.serviceMin > 0 ? `diservis · ${Math.ceil(u.serviceMin / 60)} jam lagi` : `${Math.round(u.sinceService)} / ${SERVICE_H} jam sejak servis`}</span>
+        </div>
+        <button className="small" disabled={u.phase !== 'rest' || u.locked} onClick={() => startService(plant, i)}>
+          Servis
+        </button>
+      </div>
       <h2>Gangguan</h2>
       <div className="row">
         <button className={u.eStop ? 'small on danger' : 'small'} onClick={() => setEStop(plant, i, !u.eStop)}>
@@ -584,20 +606,25 @@ function SyncPanel() {
   );
 }
 
-function Feeders() {
-  usePlant((s) => s.tick);
+const rp = (v: number) => `Rp ${Math.round(v).toLocaleString('id')}`;
+const rpShort = (v: number) => (v >= 1e9 ? `Rp ${(v / 1e9).toFixed(2)} M` : v >= 1e6 ? `Rp ${(v / 1e6).toFixed(1)} jt` : rp(v));
+
+function FeederList() {
   const live = busLive(plant);
   return (
-    <section className="p-panel p-feed">
-      <h2>Penyulang 20 kV</h2>
+    <>
       {plant.feeders.map((f, i) => {
         const on = f.on && live;
+        const state = f.lockout ? `lockout · perbaikan ${Math.ceil(f.repairMin / 60)} jam` : f.reclose >= 0 ? 'recloser menunggu…' : '';
         return (
           <div key={i} className="p-feeder">
-            <i className={`dot ${on ? 'ok' : 'bad'}`} />
-            <span className="nm">{f.name}</span>
+            <i className={`dot ${on ? 'ok' : f.lockout || f.reclose >= 0 ? 'warn' : 'bad'}`} />
+            <span className="nm">
+              {f.name}
+              {state && <em className="p-state">{state}</em>}
+            </span>
             <b>{Math.round(f.demand)} kW</b>
-            <button className={`small ${f.on ? 'on' : ''}`} onClick={() => setFeeder(plant, i, !f.on)}>
+            <button className={`small ${f.on ? 'on' : ''}`} disabled={f.lockout} onClick={() => setFeeder(plant, i, !f.on)}>
               {f.on ? 'Lepas' : 'Sambung'}
             </button>
           </div>
@@ -611,6 +638,159 @@ function Feeders() {
           .join(' → ')}
         .
       </small>
+    </>
+  );
+}
+
+function WeatherUps() {
+  const W: [Weather, string][] = [
+    ['cerah', 'Cerah'],
+    ['hujan', '🌧 Hujan'],
+    ['badai', '⛈ Badai petir'],
+  ];
+  return (
+    <>
+      <h2>Cuaca</h2>
+      <div className="row">
+        {W.map(([w, l]) => (
+          <button key={w} className={`small ${plant.weather === w ? 'on' : ''}`} onClick={() => setWeather(plant, w)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <label className="chk wide">
+        <input type="checkbox" checked={plant.autoWeather} onChange={() => (plant.autoWeather = !plant.autoWeather)} /> Cuaca berubah sendiri
+      </label>
+      <p className="hint">
+        Hujan: dahan basah bisa menyentuh kabel. Badai: petir menyambar jaringan 20 kV. Recloser mencoba menyambung lagi dua kali; gangguan sesaat langsung
+        pulih, pohon tumbang membuat penyulang lockout sampai regu lapangan selesai.
+      </p>
+      <h2>UPS</h2>
+      {plant.ups.map((u) => {
+        const mins = (u.charge * u.kwh * 60) / u.kw;
+        return (
+          <div key={u.name} className="p-ups">
+            <div>
+              <b>{u.name}</b>
+              <span className={u.onBattery ? 'warn' : u.charge > 0.99 ? 'ok' : ''}>
+                {u.charge === 0 ? 'baterai habis' : u.onBattery ? `pakai baterai · sisa ±${Math.round(mins)} mnt` : u.charge < 0.99 ? 'mengisi baterai' : 'online'}
+              </span>
+            </div>
+            <div className="p-tank">
+              <em style={{ width: `${u.charge * 100}%`, background: u.charge < 0.2 ? '#e0533c' : '#3fa06a' }} />
+              <span>
+                {Math.round(u.charge * 100)}% · {u.kw} kW · {u.kwh} kWh
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      <p className="hint">UPS menanggung beban kritis tanpa jeda saat sumbernya hilang: layar SCADA, relay proteksi, lampu darurat ruang kontrol, dan ruang tindakan klinik.</p>
+    </>
+  );
+}
+
+function ServiceCost() {
+  const t = plant.today;
+  const todayRp = t.litres * FUEL_RP + t.serviceRp;
+  const perKwh = t.kwh > 1 ? (t.litres * FUEL_RP) / t.kwh : 0;
+  return (
+    <>
+      <h2>Jadwal servis (tiap {SERVICE_H} jam)</h2>
+      {plant.units.map((u, i) => {
+        const f = u.sinceService / SERVICE_H;
+        return (
+          <div key={i} className="p-svc">
+            <b>G{i + 1}</b>
+            <div className="p-tank">
+              <em style={{ width: `${Math.min(1, f) * 100}%`, background: f > 1.2 ? '#e0533c' : f > 1 ? '#e0a33c' : '#3fa06a' }} />
+              <span>{u.serviceMin > 0 ? `diservis · ${Math.ceil(u.serviceMin / 60)} jam lagi` : `${Math.round(u.sinceService)} / ${SERVICE_H} jam`}</span>
+            </div>
+            <button className="small" disabled={u.phase !== 'rest' || u.locked} onClick={() => startService(plant, i)}>
+              Servis
+            </button>
+          </div>
+        );
+      })}
+      <p className="hint">Matikan genset dulu untuk diservis (±4 jam). Lewat 100 jam dari jadwal, risiko genset trip karena oli rusak terus naik.</p>
+      <h2>Biaya hari ini (Hari {plant.day})</h2>
+      <div className="p-cost">
+        <span>Energi</span>
+        <b>{(t.kwh / 1000).toFixed(1)} MWh</b>
+        <span>Solar</span>
+        <b>
+          {Math.round(t.litres).toLocaleString('id')} L · {rpShort(t.litres * FUEL_RP)}
+        </b>
+        <span>Servis</span>
+        <b>{rpShort(t.serviceRp)}</b>
+        <span>Total</span>
+        <b>{rpShort(todayRp)}</b>
+        <span>Biaya solar per kWh</span>
+        <b>
+          {perKwh ? rp(perKwh) : '–'} <small>(PLN industri ±{rp(PLN_RP)})</small>
+        </b>
+      </div>
+      {plant.reports.length > 0 && (
+        <>
+          <h2>Laporan harian</h2>
+          <table className="p-report">
+            <thead>
+              <tr>
+                <th>Hari</th>
+                <th>MWh</th>
+                <th>Solar L</th>
+                <th>Biaya</th>
+                <th>Rp/kWh</th>
+                <th>Lepas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plant.reports.map((r) => (
+                <tr key={r.day}>
+                  <td>{r.day}</td>
+                  <td>{(r.kwh / 1000).toFixed(1)}</td>
+                  <td>{Math.round(r.litres).toLocaleString('id')}</td>
+                  <td>{rpShort(r.rp)}</td>
+                  <td>{r.kwh ? Math.round(r.rp / r.kwh).toLocaleString('id') : '–'}</td>
+                  <td>{r.shed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      <p className="hint">
+        Asumsi: solar industri {rp(FUEL_RP)}/L, servis 500 jam {rpShort(SERVICE_RP)}, tarif PLN industri ±{rp(PLN_RP)}/kWh. Total sejak mulai {rpShort(plant.costRp)}.
+      </p>
+    </>
+  );
+}
+
+type Tab = 'feeder' | 'cuaca' | 'biaya';
+let lastTab: Tab = 'feeder';
+
+function Feeders() {
+  usePlant((s) => s.tick);
+  const [tab, setTab] = useState<Tab>(lastTab);
+  const pick = (t: Tab) => {
+    lastTab = t;
+    setTab(t);
+  };
+  const tabs: [Tab, string][] = [
+    ['feeder', 'Penyulang'],
+    ['cuaca', 'Cuaca & UPS'],
+    ['biaya', 'Servis & biaya'],
+  ];
+  return (
+    <section className="p-panel p-feed">
+      <div className="p-tabs" role="tablist">
+        {tabs.map(([t, l]) => (
+          <button key={t} role="tab" aria-selected={tab === t} className={`small ${tab === t ? 'on' : ''}`} onClick={() => pick(t)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {tab === 'feeder' ? <FeederList /> : tab === 'cuaca' ? <WeatherUps /> : <ServiceCost />}
     </section>
   );
 }

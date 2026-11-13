@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { busLive, busLoadKw, closeBreaker, create, DAY_L, startScenario, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
+import { busLive, busLoadKw, closeBreaker, feederFault, SERVICE_RP, startService, create, DAY_L, startScenario, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
 
 const run = (p: Plant, s: number, dt = 0.02) => {
   for (let t = 0; t < s; t += dt) step(p, dt);
@@ -186,5 +186,54 @@ describe('the heavier complex', () => {
       expect(p.stats.trips).toBe(0);
       expect(p.stats.shed).toBe(0);
     }
+  });
+});
+
+describe('operations: UPS, faults, service, costs', () => {
+  const live = () => {
+    const p = create();
+    warm(p, 0);
+    closeBreaker(p, 0);
+    run(p, 0.5);
+    return p;
+  };
+
+  it('a UPS carries its load with no break when the bus goes, then recharges', () => {
+    const p = live();
+    expect(p.ups[0].onBattery).toBe(false);
+    p.units[0].breaker = false; // lose the bus
+    run(p, 3);
+    expect(p.ups[0].onBattery).toBe(true);
+    expect(p.ups[0].charge).toBeLessThan(1);
+  });
+
+  it('a transient fault recloses; a permanent one locks out until the crew is done', () => {
+    const p = live();
+    setFeeder(p, 3, true);
+    feederFault(p, 3, false, '');
+    expect(p.feeders[3].on).toBe(false);
+    run(p, 2);
+    expect(p.feeders[3].on).toBe(true);
+    feederFault(p, 3, true, '');
+    run(p, 8);
+    expect(p.feeders[3].lockout).toBe(true);
+    setFeeder(p, 3, true);
+    expect(p.feeders[3].on).toBe(false);
+    p.timeScale = 20;
+    run(p, 12);
+    expect(p.feeders[3].lockout).toBe(false);
+  });
+
+  it('a service takes the set out for about four hours and resets its counter; costs add up', () => {
+    const p = create();
+    p.timeScale = 20;
+    startService(p, 4);
+    expect(p.units[4].locked).toBe(true);
+    startUnit(p, 4);
+    expect(p.units[4].phase).toBe('rest');
+    run(p, 13);
+    expect(p.units[4].locked).toBe(false);
+    expect(p.units[4].sinceService).toBe(0);
+    expect(p.costRp).toBe(SERVICE_RP);
   });
 });

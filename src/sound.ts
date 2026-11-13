@@ -217,6 +217,8 @@ function oneShot(kind: 'beep' | 'clunk' | 'engage' | 'release') {
 export function playPlantEvent(e: string) {
   if (e === 'breaker' || e === 'feeder' || e === 'shed') oneShot('clunk');
   else if (e === 'start') oneShot('engage');
+  else if (e.startsWith('fault:')) oneShot('clunk');
+  else if (e === 'ups') oneShot('beep');
   else if (e === 'trip') oneShot('clunk');
   else if (e === 'badSync') {
     // the bang of closing out of phase: breaker slam plus a heavy thump through the floor
@@ -243,4 +245,78 @@ export function playEvent(e: SimEvent) {
   else if (e === 'gcbClose' || e === 'gcbOpen' || e === 'mcbClose' || e === 'mcbOpen') oneShot('clunk');
   else if (e === 'starterOn') oneShot('engage');
   else if (e === 'starterOff') oneShot('release');
+}
+
+// ---------- plant weather and arcs ----------
+
+let rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+
+/** Rain on the roof and the ground: filtered noise, 0 off … 1 storm. */
+export function setRain(level: number) {
+  if (!ctx) return;
+  const c = ctx;
+  if (!rain && level > 0) {
+    const src = c.createBufferSource();
+    src.buffer = noiseBuffer(c, 3);
+    src.loop = true;
+    const hp = c.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 900;
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 6500;
+    const gain = c.createGain();
+    gain.gain.value = 0;
+    src.connect(hp).connect(lp).connect(gain).connect(master);
+    src.start();
+    rain = { src, gain };
+  }
+  if (rain) rain.gain.gain.setTargetAtTime(level * 0.16, c.currentTime, 0.8);
+}
+
+/** Thunder after `delay` seconds: a crack, then a long low rumble. */
+export function thunder(delay: number) {
+  if (!ctx) return;
+  const c = ctx;
+  const t0 = c.currentTime + delay;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuffer(c, 5);
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(2400, t0);
+  lp.frequency.exponentialRampToValueAtTime(140, t0 + 1.2);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.9, t0 + 0.05);
+  g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.8);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 4.5);
+  src.connect(lp).connect(g).connect(master);
+  src.start(t0);
+  src.stop(t0 + 5);
+}
+
+/** Electric arc: a harsh buzzing crackle. */
+export function arcSound() {
+  if (!ctx) return;
+  const c = ctx;
+  const t0 = c.currentTime;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuffer(c, 1);
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 2200;
+  bp.Q.value = 0.7;
+  const hum = c.createOscillator();
+  hum.type = 'sawtooth';
+  hum.frequency.value = 100;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.7, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+  src.connect(bp).connect(g);
+  hum.connect(g);
+  g.connect(master);
+  src.start(t0);
+  src.stop(t0 + 0.5);
+  hum.start(t0);
+  hum.stop(t0 + 0.5);
 }

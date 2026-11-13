@@ -10,7 +10,7 @@ export const cams = { current: null as ElementRef<typeof CameraControls> | null 
 const VIEWS: Record<PlantCam, [number[], number[]]> = {
   hall: [[16, 24, 34], [0, 2, 0]],
   inside: [[-25, 3.2, 6.5], [6, 2, -1]],
-  control: [[24, 3.4, 4], [33, 2.2, 0]],
+  control: [[28.3, 1.9, 0], [36, 1.25, 0]],
   site: [[-60, 45, 70], [0, 0, 10]],
   complex: [[95, 105, 300], [50, 0, 175]],
 };

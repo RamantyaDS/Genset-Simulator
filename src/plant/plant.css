@@ -275,6 +275,80 @@
   font-size: 11.5px;
   margin: 8px 0 0;
 }
+.p-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.p-tabs button {
+  flex: 1;
+}
+.p-state {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  color: #e0a33c;
+}
+.p-ups {
+  margin-bottom: 6px;
+}
+.p-ups > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+.p-ups .warn {
+  color: #e0a33c;
+}
+.p-ups .ok {
+  color: #6fdc8c;
+}
+.p-svc {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.p-detail .p-svc {
+  grid-template-columns: 1fr auto;
+}
+.p-svc .p-tank {
+  margin: 0;
+}
+.p-cost {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  font-size: 12px;
+}
+.p-cost b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.p-cost small {
+  color: var(--dim);
+  font-weight: 400;
+}
+.p-report {
+  width: 100%;
+  font-size: 11px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.p-report th,
+.p-report td {
+  text-align: right;
+  padding: 2px 3px;
+  border-bottom: 1px solid var(--line);
+}
+.p-feed .hint {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.4;
+}
 .p-goal {
   font-size: 12px;
   line-height: 1.45;

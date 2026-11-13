@@ -16,6 +16,13 @@ export const TANK_L = 60000; // bulk storage
 export const TRUCK_L = 16000;
 export const DAY_L = 2000; // day tank beside each set, filled from the bulk tanks by a transfer pump
 export const PUMP_LPH = 3000; // transfer pump, litres per (simulated) hour
+// Operating costs. Estimates for illustration: non-subsidised industrial diesel, a 500-hour service on a 4016,
+// and the PLN industrial tariff for comparison.
+export const FUEL_RP = 15000; // per litre
+export const SERVICE_RP = 35_000_000; // per service
+export const PLN_RP = 1115; // per kWh
+export const SERVICE_H = 500; // oil, filters and checks every 500 running hours
+const SERVICE_MIN = 4 * 60; // a service takes about four hours
 const PUMP_ON = 0.6; // level switch: pump starts below 60%, stops at 95%
 const PUMP_OFF = 0.95;
 
@@ -51,6 +58,8 @@ export interface Unit {
   dipF: number; // off-bus speed dip after a load step (fraction), damped spring
   dipFv: number;
   locked: boolean; // out for overhaul: cannot be started
+  sinceService: number; // running hours since the last service
+  serviceMin: number; // simulated minutes left of a service in progress, 0 none
   dayTank: number; // litres
   pumpAuto: boolean; // transfer pump on its level switch (off: the day tank is not refilled)
   pumping: boolean;
@@ -63,6 +72,32 @@ export interface Feeder {
   shedOrder: number; // 1 is shed first
   on: boolean;
   demand: number; // kW right now
+  outageMin: number;
+  reclose: number; // real seconds until the recloser tries again, −1 none
+  shots: number; // reclose attempts left in this sequence
+  permanent: boolean; // the fault is still there (tree on the line, broken insulator)
+  lockout: boolean; // recloser gave up: the crew must clear the fault first
+  repairMin: number; // simulated minutes until the crew has cleared it
+}
+
+export type Weather = 'cerah' | 'hujan' | 'badai';
+
+/** A battery UPS: carries its critical load with no break when its supply goes, until the battery is flat. */
+export interface Ups {
+  name: string;
+  kw: number;
+  kwh: number; // battery capacity
+  charge: number; // 0..1
+  source: 'bus' | number; // the plant bus, or a feeder
+  onBattery: boolean;
+}
+
+export interface DayReport {
+  day: number;
+  kwh: number;
+  litres: number;
+  rp: number;
+  shed: number;
   outageMin: number;
 }
 
@@ -89,6 +124,13 @@ export interface Plant {
   stats: { kwh: number; litres: number; outageMin: number; shed: number; badSync: number; trips: number };
   events: string[];
   message: string;
+  weather: Weather;
+  autoWeather: boolean; // the weather changes by itself
+  weatherMin: number; // simulated minutes until the next change
+  ups: Ups[];
+  today: { kwh: number; litres: number; serviceRp: number; shed: number; outageMin: number };
+  reports: DayReport[];
+  costRp: number; // fuel and service since the start
   tph: number; // mill throughput, tonnes of fresh fruit bunches per hour
   loadMul: number; // whole-complex load multiplier (test slider)
   pksAllDay: boolean; // peak crop: the mill runs two shifts through the night
@@ -216,11 +258,26 @@ export function create(): Plant {
       dipF: 0,
       dipFv: 0,
       locked: false,
+      sinceService: [180, 320, 455, 90, 490][i],
+      serviceMin: 0,
       dayTank: DAY_L * (0.85 + 0.03 * i),
       pumpAuto: true,
       pumping: false,
     })),
-    feeders: FEEDERS.map(([name, short, shedOrder], id) => ({ id, name, short, shedOrder, on: false, demand: 0, outageMin: 0 })),
+    feeders: FEEDERS.map(([name, short, shedOrder], id) => ({
+      id,
+      name,
+      short,
+      shedOrder,
+      on: false,
+      demand: 0,
+      outageMin: 0,
+      reclose: -1,
+      shots: 0,
+      permanent: false,
+      lockout: false,
+      repairMin: 0,
+    })),
     busHz: 0,
     busV: 0,
     dip: 0,
@@ -241,6 +298,16 @@ export function create(): Plant {
     stats: { kwh: 0, litres: 0, outageMin: 0, shed: 0, badSync: 0, trips: 0 },
     events: [],
     message: '',
+    weather: 'cerah',
+    autoWeather: false,
+    weatherMin: 180,
+    ups: [
+      { name: 'UPS ruang kontrol & SCADA', kw: 18, kwh: 36, charge: 1, source: 'bus', onBattery: false },
+      { name: 'UPS klinik (ruang tindakan)', kw: 12, kwh: 24, charge: 1, source: 4, onBattery: false },
+    ],
+    today: { kwh: 0, litres: 0, serviceRp: 0, shed: 0, outageMin: 0 },
+    reports: [],
+    costRp: 0,
     tph: 60,
     loadMul: 1,
     pksAllDay: false,
@@ -351,6 +418,49 @@ export function stopUnit(p: Plant, i: number) {
 export function resetUnit(p: Plant, i: number) {
   const u = p.units[i];
   if (u.rpm < 1 && !u.eStop && !u.locked) u.alarm = null;
+  if (!u.locked && u.sinceService > SERVICE_H + 100) say(p, `G${i + 1} sudah lewat jadwal servis ${Math.round(u.sinceService - SERVICE_H)} jam. Sebaiknya diservis.`);
+}
+
+/** Take a stopped set out for its 500-hour service: about four hours, then its counter starts again. */
+export function startService(p: Plant, i: number) {
+  const u = p.units[i];
+  if (u.locked) return say(p, `G${i + 1} sedang tidak bisa diservis (${u.alarm ?? 'dikunci'}).`);
+  if (u.phase !== 'rest') return say(p, `Matikan G${i + 1} dulu sebelum diservis.`);
+  u.locked = true;
+  u.serviceMin = SERVICE_MIN;
+  u.alarm = 'Servis';
+  u.auto = false;
+  p.costRp += SERVICE_RP;
+  p.today.serviceRp += SERVICE_RP;
+  say(p, `G${i + 1} mulai diservis: ganti oli, filter oli, filter solar, filter udara, cek tali kipas dan baterai. Sekitar 4 jam.`);
+}
+
+export function setWeather(p: Plant, w: Weather) {
+  p.weather = w;
+  p.weatherMin = 120 + Math.random() * 240;
+  say(
+    p,
+    w === 'cerah'
+      ? 'Cuaca cerah kembali.'
+      : w === 'hujan'
+        ? 'Hujan turun. Sesekali dahan menyentuh kabel 20 kV.'
+        : 'Badai petir! Sambaran di dekat jaringan 20 kV bisa membuat penyulang trip.',
+  );
+}
+
+/** A fault on a feeder: the short circuit hits the sets for a moment, the feeder breaker opens, and the recloser
+ *  tries twice. A transient fault (flashover from lightning) clears; a permanent one (tree on the line) locks out. */
+export function feederFault(p: Plant, i: number, permanent: boolean, cause: string) {
+  const f = p.feeders[i];
+  if (!f.on || !busLive(p)) return;
+  p.inrush.push({ name: 'hubung singkat', kw: 1400, t: 0 });
+  bump(p, -(1400 / Math.max(1, capacityKw(p))) * 1.5);
+  f.on = false;
+  f.permanent = permanent;
+  f.shots = 2;
+  f.reclose = 1.5;
+  p.events.push(`fault:${i}`);
+  say(p, `${cause} Gangguan di penyulang "${f.short}": relay proteksi membuka breaker, recloser mencoba menyambung lagi.`);
 }
 
 /** Drain a day tank (fault drill) or refill it at once from the bulk tanks. */
@@ -417,7 +527,7 @@ export function closeBreaker(p: Plant, i: number) {
   }
   // Out-of-phase closing: a violent torque kick, the breaker trips on reverse power / overcurrent.
   p.stats.badSync++;
-  p.events.push('badSync');
+  p.events.push('badSync', `arc:${i}`);
   const severe = Math.abs(d.deg) > 60;
   u.alarm = severe ? 'Sinkronisasi gagal (sudut besar)' : 'Sinkronisasi gagal';
   bump(p, severe ? -1.2 : -0.5);
@@ -438,11 +548,17 @@ export function setSync(p: Plant, i: number, on: boolean) {
 
 export function setFeeder(p: Plant, i: number, on: boolean) {
   const f = p.feeders[i];
+  if (on && f.lockout)
+    return say(p, `Penyulang "${f.short}" terkunci (lockout): regu lapangan masih memperbaiki, sekitar ${Math.ceil(f.repairMin / 60)} jam lagi.`);
   if (on && !busLive(p)) return say(p, 'Bus masih mati. Nyalakan genset dan tutup breakernya dulu.');
   if (f.on === on) return;
   f.on = on;
   p.events.push('feeder');
   if (on) bump(p, -(f.demand / Math.max(1, capacityKw(p))) * 2.2);
+  if (on && f.permanent) {
+    f.reclose = -1;
+    feederFault(p, i, true, 'Breaker ditutup ke gangguan yang masih ada!');
+  }
 }
 
 export function callTruck(p: Plant) {
@@ -484,6 +600,7 @@ function shedOne(p: Plant, reason: string) {
   if (!f) return;
   f.on = false;
   p.stats.shed++;
+  p.today.shed++;
   p.events.push('shed');
   say(p, `${reason} Penyulang "${f.name}" dilepas otomatis supaya kawasan tidak padam total.`);
 }
@@ -495,6 +612,12 @@ export function step(p: Plant, dt: number) {
   p.clock += simMin;
   if (p.clock >= 1440) {
     p.clock -= 1440;
+    const t = p.today;
+    p.reports = [
+      ...p.reports.slice(-6),
+      { day: p.day, kwh: t.kwh, litres: t.litres, rp: t.litres * FUEL_RP + t.serviceRp, shed: t.shed, outageMin: t.outageMin },
+    ];
+    p.today = { kwh: 0, litres: 0, serviceRp: 0, shed: 0, outageMin: 0 };
     p.day++;
   }
   const h = hourOf(p);
@@ -687,6 +810,9 @@ export function step(p: Plant, dt: number) {
   }
   p.stats.litres += litres;
   p.stats.kwh += load * hrs;
+  p.today.litres += litres;
+  p.today.kwh += load * hrs;
+  p.costRp += litres * FUEL_RP;
   if (p.truckEta >= 0) {
     p.truckEta -= dt;
     if (p.truckEta < 0) {
@@ -695,6 +821,91 @@ export function step(p: Plant, dt: number) {
       say(p, 'Truk tangki selesai mengisi 16.000 L.');
     }
   }
+  // Weather: rain and storms put the 20 kV lines at risk. Lightning flashes come on real time.
+  if (p.autoWeather) {
+    p.weatherMin -= simMin;
+    if (p.weatherMin <= 0) {
+      const r = Math.random();
+      setWeather(p, r < 0.55 ? 'cerah' : r < 0.85 ? 'hujan' : 'badai');
+    }
+  }
+  if (p.weather === 'badai' && Math.random() < dt / 7) {
+    p.events.push('lightning');
+    const live = p.feeders.filter((f) => f.on);
+    if (live.length && busLive(p) && Math.random() < 0.35)
+      feederFault(p, live[Math.floor(Math.random() * live.length)].id, Math.random() < 0.3, 'Petir menyambar jaringan!');
+  }
+  if (p.weather === 'hujan' && busLive(p) && Math.random() < dt / 90) {
+    const live = p.feeders.filter((f) => f.on);
+    if (live.length) feederFault(p, live[Math.floor(Math.random() * live.length)].id, Math.random() < 0.5, 'Dahan basah menyentuh kabel.');
+  }
+  // Reclosers: two attempts; a permanent fault trips again and locks out until the crew has cleared it.
+  for (const f of p.feeders) {
+    if (f.reclose >= 0) {
+      f.reclose -= dt;
+      if (f.reclose < 0) {
+        if (!busLive(p)) f.shots = 0;
+        else if (f.permanent) {
+          f.shots--;
+          p.inrush.push({ name: 'hubung singkat', kw: 1400, t: 0 });
+          bump(p, -(1400 / Math.max(1, capacityKw(p))) * 1.5);
+          p.events.push(`fault:${f.id}`);
+          if (f.shots > 0) f.reclose = 4;
+          else {
+            f.lockout = true;
+            f.repairMin = 90 + Math.random() * 90;
+            say(p, `Recloser "${f.short}" lockout: gangguan permanen (pohon tumbang). Regu lapangan dikirim, sekitar ${Math.ceil(f.repairMin / 60)} jam.`);
+          }
+        } else {
+          f.on = true;
+          p.events.push('feeder');
+          say(p, `Recloser "${f.short}" berhasil menyambung lagi: gangguannya sesaat (flashover), penyulang normal.`);
+        }
+      }
+    }
+    if (f.lockout) {
+      f.repairMin -= simMin;
+      if (f.repairMin <= 0) {
+        f.lockout = false;
+        f.permanent = false;
+        say(p, `Regu lapangan selesai di penyulang "${f.short}". Penyulang boleh disambung lagi.`);
+      }
+    }
+  }
+  // UPS: no break when the supply goes; the battery carries the load, then recharges.
+  for (const u of p.ups) {
+    const supplied = u.source === 'bus' ? busLive(p) : busLive(p) && p.feeders[u.source].on;
+    if (!supplied && u.charge > 0) {
+      if (!u.onBattery) {
+        u.onBattery = true;
+        p.events.push('ups');
+        say(p, `${u.name} mengambil alih tanpa jeda: baterai menanggung ${u.kw} kW, cukup sekitar ${Math.round(((u.charge * u.kwh) / u.kw) * 60)} menit.`);
+      }
+      u.charge = Math.max(0, u.charge - ((u.kw / u.kwh) * simMin) / 60);
+      if (u.charge === 0) say(p, `${u.name}: baterai habis, beban kritis ikut padam.`);
+    } else {
+      u.onBattery = false;
+      if (supplied) u.charge = Math.min(1, u.charge + ((0.25 * simMin) / 60)); // ~4 h to full
+    }
+  }
+  // Maintenance counters and services in progress; a set well past its service may fail.
+  for (const u of p.units) {
+    if (u.phase === 'running' || u.phase === 'cooling') u.sinceService += simMin / 60;
+    if (u.serviceMin > 0) {
+      u.serviceMin -= simMin;
+      if (u.serviceMin <= 0) {
+        u.serviceMin = 0;
+        u.sinceService = 0;
+        u.locked = false;
+        u.alarm = null;
+        say(p, `Servis G${u.id + 1} selesai. Genset siap dipakai lagi (atur Auto bila ingin diatur kontrol otomatis).`);
+      }
+    }
+    const over = u.sinceService - (SERVICE_H + 100);
+    if (over > 0 && u.phase === 'running' && Math.random() < (simMin / 60) * 0.01 * (1 + over / 50))
+      tripUnit(p, u.id, 'Servis terlewat: oli encer, tekanan oli rendah');
+  }
+
   // Challenge: judged after 24 simulated hours.
   const g = p.goal;
   if (g && !g.done && p.master && g.id === 'hemat') g.usedMaster = true;
@@ -715,7 +926,9 @@ export function step(p: Plant, dt: number) {
 
   // Customers without power.
   for (const f of p.feeders) if (!(f.on && busLive(p))) f.outageMin += simMin;
-  p.stats.outageMin += p.feeders.filter((f) => !(f.on && busLive(p))).length * simMin;
+  const dark = p.feeders.filter((f) => !(f.on && busLive(p))).length * simMin;
+  p.stats.outageMin += dark;
+  p.today.outageMin += dark;
 }
 
 function master(p: Plant, dt: number) {
@@ -756,7 +969,7 @@ function master(p: Plant, dt: number) {
   // Reconnect shed or open feeders, most important first, one at a time while there is headroom.
   p.autoFeederT -= dt;
   if (p.autoFeederT <= 0) {
-    const next = p.feeders.filter((f) => !f.on).sort((a, b) => b.shedOrder - a.shedOrder)[0];
+    const next = p.feeders.filter((f) => !f.on && !f.lockout && f.reclose < 0).sort((a, b) => b.shedOrder - a.shedOrder)[0];
     if (next && loadKw(p) + next.demand < 0.95 * on.length * PRIME_KW) {
       setFeeder(p, next.id, true);
       p.autoFeederT = 3;

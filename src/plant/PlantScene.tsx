@@ -15,6 +15,8 @@ import { Box, Cyl, M } from '../scene/parts';
 import { useUI } from '../store';
 import { busLive, PRIME_KW } from '../sim/plant';
 import { playPlantEvent, soundSource, updateSound } from '../sound';
+import { ControlPanels } from './ControlPanels';
+import { Arcs, Lightning, PlantSmoke, Rain } from './Fx';
 import { GensetUnit, unitState } from './GensetUnit';
 import { cams, goPlant, unitWorld } from './camera';
 import { advancePlant, HALL, onPlantEvent, plant, usePlant, UNIT_X } from './store';
@@ -105,6 +107,48 @@ function DayNight() {
 
 // ---------- engine hall ----------
 
+/** Hall lighting from the station supply; when the bus is dead only the battery emergency fittings stay on and amber
+ *  beacons turn at the ends of the hall. */
+function HallLights({ h }: { h: number }) {
+  const a = useRef<THREE.PointLight>(null);
+  const b = useRef<THREE.PointLight>(null);
+  const beacons = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const live = busLive(plant);
+    for (const l of [a.current!, b.current!]) {
+      l.intensity = live ? 60 : 9;
+      l.color.set(live ? '#fff4e0' : '#ffcf8a');
+    }
+    const g = beacons.current!;
+    g.visible = !live;
+    // rotating-beacon look: each lamp sweeps on and off
+    g.children.forEach((c, i) =>
+      c.traverse((o) => {
+        const k = Math.max(0, Math.sin(clock.elapsedTime * 7 + i * 2));
+        if ((o as THREE.SpotLight).isSpotLight) (o as THREE.SpotLight).intensity = 90 * k;
+        if ((o as THREE.Mesh).isMesh) ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).emissiveIntensity = 0.6 + 2.5 * k;
+      }),
+    );
+  });
+  return (
+    <>
+      <pointLight ref={a} position={[-12, 7, 3]} intensity={60} distance={30} color="#fff4e0" />
+      <pointLight ref={b} position={[12, 7, 3]} intensity={60} distance={30} color="#fff4e0" />
+      <group ref={beacons} visible={false}>
+        {[-25, 25].map((x) => (
+          <group key={x} position={[x, h - 1.8, 8.4]}>
+            <mesh>
+              <cylinderGeometry args={[0.18, 0.2, 0.3, 16]} />
+              <meshStandardMaterial color="#ffae00" emissive="#ff9a00" emissiveIntensity={2.5} transparent opacity={0.85} />
+            </mesh>
+            <spotLight position={[0, 0, 0]} target-position={[x + 6, h - 3, 8.4]} angle={0.35} penumbra={0.4} intensity={80} distance={25} color="#ff9a00" />
+          </group>
+        ))}
+      </group>
+    </>
+  );
+}
+
 function Hall() {
   const { x0, x1, z0, z1, h } = HALL;
   const louvre = useMemo(() => {
@@ -175,8 +219,7 @@ function Hall() {
       {Array.from({ length: 6 }, (_, i) => -22.5 + i * 9).map((x) => (
         <Box key={x} s={[1.6, 0.08, 0.4]} m={M.white} position={[x, h - 0.3, 3]} />
       ))}
-      <pointLight position={[-12, 7, 3]} intensity={60} distance={30} color="#fff4e0" />
-      <pointLight position={[12, 7, 3]} intensity={60} distance={30} color="#fff4e0" />
+      <HallLights h={h} />
       <Text position={[0, h - 1.2, z1 + 0.2]} fontSize={0.9} color="#1d3a5c">
         PLTD KAWASAN SAWIT · 5 × 2250 kVA
       </Text>
@@ -185,68 +228,8 @@ function Hall() {
 }
 
 /** Stacks through the roof with silencers; exhaust smoke from each running set. */
+/** Exhaust stacks: riser through the roof, horizontal silencer, outlet. The smoke itself is in Fx. */
 function Stacks() {
-  const N = 600;
-  const { geo, mat, parts } = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    for (const [k, n] of [['position', 3], ['size', 1], ['alpha', 1], ['shade', 1]] as const) geo.setAttribute(k, new THREE.BufferAttribute(new Float32Array(N * n), n));
-    const mat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: { scale: { value: 800 } },
-      vertexShader: `attribute float size; attribute float alpha; attribute float shade; uniform float scale; varying float vA; varying float vS;
-        void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = size*scale/-mv.z; gl_Position = projectionMatrix*mv; vA=alpha; vS=shade; }`,
-      fragmentShader: `varying float vA; varying float vS; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.0,d)*vA; if(a<0.004) discard; gl_FragColor=vec4(vec3(vS),a); }`,
-    });
-    const parts = Array.from({ length: N }, () => ({ p: new THREE.Vector3(0, -99, 0), v: new THREE.Vector3(), age: 9, life: 1, dark: 0 }));
-    return { geo, mat, parts };
-  }, []);
-  const acc = useRef(new Array(5).fill(0));
-  const next = useRef(0);
-  const soot = useRef(new Array(5).fill(0));
-  const lastKw = useRef(new Array(5).fill(0));
-  useEffect(() => onPlantEvent((e) => e === 'start' && plant.units.forEach((u, i) => u.phase === 'crank' && (soot.current[i] = 1))), []);
-  useFrame(({ camera, size }, raw) => {
-    const dt = Math.min(raw, 0.05);
-    mat.uniforms.scale.value = (size.height / 2) * (camera as THREE.PerspectiveCamera).projectionMatrix.elements[5];
-    plant.units.forEach((u, i) => {
-      const dKw = u.kw - lastKw.current[i];
-      lastKw.current[i] = u.kw;
-      if (dKw > 50) soot.current[i] = Math.min(1, soot.current[i] + dKw / 1200);
-      soot.current[i] = Math.max(0, soot.current[i] - dt * 0.35);
-      if (u.rpm < 300) return;
-      acc.current[i] += dt * (6 + 14 * (u.kw / PRIME_KW) + 30 * soot.current[i]);
-      while (acc.current[i] > 1) {
-        acc.current[i]--;
-        const q = parts[next.current];
-        next.current = (next.current + 1) % N;
-        q.p.set(UNIT_X[i] + (Math.random() - 0.5) * 0.2, HALL.h + 4.2, STACK_Z);
-        q.v.set((Math.random() - 0.5) * 0.4, 3 + 3 * (u.kw / PRIME_KW), (Math.random() - 0.5) * 0.4);
-        q.age = 0;
-        q.life = 3 + Math.random() * 2;
-        q.dark = Math.min(1, 0.1 + 0.25 * (u.kw / PRIME_KW) + soot.current[i]);
-      }
-    });
-    const pos = geo.attributes.position.array as Float32Array;
-    const sz = geo.attributes.size.array as Float32Array;
-    const al = geo.attributes.alpha.array as Float32Array;
-    const sh = geo.attributes.shade.array as Float32Array;
-    parts.forEach((q, i) => {
-      if (q.age < q.life) {
-        q.age += dt;
-        q.v.multiplyScalar(1 - dt * 1.2);
-        q.v.y += dt * 0.5;
-        q.v.x += dt * 0.6;
-        q.p.addScaledVector(q.v, dt);
-      }
-      const t = Math.min(1, q.age / q.life);
-      pos.set([q.p.x, q.p.y, q.p.z], i * 3);
-      sz[i] = 0.5 * (1 + t * 7);
-      al[i] = t >= 1 ? 0 : (1 - t) * (0.08 + 0.5 * q.dark);
-      sh[i] = 0.6 - 0.45 * q.dark + 0.15 * t;
-    });
-    for (const k of ['position', 'size', 'alpha', 'shade']) geo.attributes[k].needsUpdate = true;
-  });
   return (
     <group>
       {UNIT_X.map((x) => (
@@ -254,9 +237,9 @@ function Stacks() {
           <Cyl r={0.2} l={HALL.h - 2.4} m={M.silver} position={[0, 2.6 + (HALL.h - 2.4) / 2, 0]} />
           <Cyl r={0.55} l={3.2} axis="z" m={M.silver} position={[0, HALL.h + 1.6, -0.6]} />
           <Cyl r={0.2} l={2.6} m={M.silver} position={[0, HALL.h + 2.9, 0]} />
+          <Cyl r={0.24} l={0.12} m={M.cast} position={[0, HALL.h + 4.15, 0]} />
         </group>
       ))}
-      <points geometry={geo} material={mat} frustumCulled={false} />
     </group>
   );
 }
@@ -269,7 +252,15 @@ function ControlRoom() {
     return { c, t: new THREE.CanvasTexture(c) };
   }, []);
   const last = useRef(0);
+  const light = useRef<THREE.PointLight>(null);
+  const screen = useRef<THREE.MeshBasicMaterial>(null);
   useFrame(({ clock }) => {
+    // Room lighting from the station supply; on the UPS only the emergency fittings stay on.
+    const ups = plant.ups[0];
+    const powered = busLive(plant) || ups.charge > 0;
+    light.current!.intensity = busLive(plant) ? 20 : powered ? 7 : 0;
+    light.current!.color.set(busLive(plant) ? '#eef4ff' : '#ffd9a0');
+    screen.current!.color.set(powered ? '#ffffff' : '#050505');
     if (clock.elapsedTime - last.current < 0.3) return;
     last.current = clock.elapsedTime;
     // SCADA wall screen: single line diagram with live states
@@ -323,21 +314,18 @@ function ControlRoom() {
         <planeGeometry args={[12, 3.2]} />
         <meshStandardMaterial color="#a8c4d4" metalness={0.9} roughness={0.05} transparent opacity={0.2} depthWrite={false} />
       </mesh>
-      {/* row of five set controllers and the master/sync panel */}
-      {Array.from({ length: 6 }, (_, i) => (
-        <group key={i} position={[4.2, 1.2, -4.5 + i * 1.8]}>
-          <Box s={[0.5, 2.2, 1.6]} m={i === 5 ? M.greyLight : M.white} />
-          <Box s={[0.02, 0.35, 0.5]} m={M.black} position={[-0.26, 0.4, 0]} />
-        </group>
-      ))}
-      <mesh position={[4.38, 2.9, -1]} rotation={[0, -Math.PI / 2, 0]}>
+      {/* switchboard: five set panels and the bus/feeder panel, all clickable */}
+      <ControlPanels />
+      {/* SCADA wall screen on the back wall, kept alive by the UPS when the bus is down */}
+      <mesh position={[-0.6, 2.75, -5.88]}>
         <planeGeometry args={[4.4, 2.2]} />
-        <meshBasicMaterial map={tex.t} toneMapped={false} />
+        <meshBasicMaterial ref={screen} map={tex.t} toneMapped={false} />
       </mesh>
-      <Box s={[1.2, 0.8, 3]} m={M.alt} position={[1.5, 0.4, 0]} />
-      <Box s={[0.6, 0.4, 0.05]} m={M.black} position={[1.2, 1.05, -0.6]} rotation={[0, Math.PI / 2, 0]} />
-      <Box s={[0.6, 0.4, 0.05]} m={M.black} position={[1.2, 1.05, 0.6]} rotation={[0, Math.PI / 2, 0]} />
-      <pointLight position={[0, 3.5, 0]} intensity={20} distance={12} color="#eef4ff" />
+      {/* operator desk facing the SCADA screen, out of the way of the switchboard */}
+      <Box s={[3, 0.8, 1.2]} m={M.alt} position={[-0.6, 0.4, -4.2]} />
+      <Box s={[0.6, 0.4, 0.05]} m={M.black} position={[-1.2, 1.05, -4.5]} />
+      <Box s={[0.6, 0.4, 0.05]} m={M.black} position={[0, 1.05, -4.5]} />
+      <pointLight ref={light} position={[0, 3.5, 0]} intensity={20} distance={12} color="#eef4ff" />
       <Text position={[0, 4.5, 6.25]} fontSize={0.45} color="#1d3a5c">
         RUANG KONTROL
       </Text>
@@ -436,17 +424,6 @@ function Complex() {
   const office = useLitMaterial(3, false, '#e8f1ff');
   const clinic = useLitMaterial(4, true, '#e8f1ff');
   const street = useLitMaterial(2, true, '#ffcf7a');
-  const boilerSmoke = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    const on = busLive(plant) && plant.feeders[0].on && plant.feeders[0].demand > 600;
-    boilerSmoke.current!.visible = on;
-    boilerSmoke.current!.children.forEach((c, i) => {
-      const t = (clock.elapsedTime * 0.25 + i / 6) % 1;
-      c.position.set(t * 6, 33 + t * 12, 0);
-      c.scale.setScalar(1 + t * 4);
-      ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.35 * (1 - t);
-    });
-  });
   const houses = useMemo(() => {
     const out: [number, number][] = [];
     for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) out.push([-80 + c * 9, 160 + r * 14]);
@@ -462,14 +439,6 @@ function Complex() {
       ))}
       <Box s={[10, 10, 10]} m={M.greyLight} position={[42, 5, 162]} />
       <Cyl r={1.2} r2={0.9} l={34} m={M.white} position={[44, 17, 158]} />
-      <group ref={boilerSmoke} position={[44, 0, 158]}>
-        {Array.from({ length: 6 }, (_, i) => (
-          <mesh key={i}>
-            <sphereGeometry args={[1.2, 10, 10]} />
-            <meshBasicMaterial color="#e8e8e8" transparent opacity={0.3} depthWrite={false} />
-          </mesh>
-        ))}
-      </group>
       <Box s={[14, 3, 8]} m={M.greyLight} position={[-12, 1.5, 175]} rotation={[0.08, 0, 0]} />
       <Text position={[15, 16, 176.5]} fontSize={2} color="#ffffff">
         PABRIK KELAPA SAWIT
@@ -604,21 +573,31 @@ function Bulking() {
   );
 }
 
+/** Grass and laterite roads; in rain they darken and turn glossy so the lights reflect in them. */
 function Grounds() {
+  const grass = useMemo(() => new THREE.MeshStandardMaterial({ color: '#4f6f34', roughness: 1 }), []);
+  const road = useMemo(() => new THREE.MeshStandardMaterial({ color: '#a36a45', roughness: 1 }), []);
+  const wet = useRef(0);
+  useFrame((_, dt) => {
+    wet.current += ((plant.weather === 'cerah' ? 0 : 1) - wet.current) * Math.min(1, dt * 0.2);
+    const w = wet.current;
+    grass.roughness = 1 - 0.45 * w;
+    grass.color.set('#4f6f34').multiplyScalar(1 - 0.35 * w);
+    road.roughness = 1 - 0.75 * w;
+    road.metalness = 0.15 * w;
+    road.color.set('#a36a45').multiplyScalar(1 - 0.45 * w);
+  });
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 100]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 100]} receiveShadow material={grass}>
         <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#4f6f34" roughness={1} />
       </mesh>
       {/* laterite roads: plant yard, main road north to the complex */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.0, 14]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.0, 14]} material={road}>
         <planeGeometry args={[110, 14]} />
-        <meshStandardMaterial color="#a36a45" roughness={1} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-10, 0.01, 120]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-10, 0.01, 120]} material={road}>
         <planeGeometry args={[8, 220]} />
-        <meshStandardMaterial color="#a36a45" roughness={1} />
       </mesh>
       {/* palm rows on the horizon */}
       {Array.from({ length: 40 }, (_, i) => (
@@ -687,6 +666,10 @@ export function PlantScene() {
         </group>
       ))}
       <FocusHighlight />
+      <PlantSmoke />
+      <Rain />
+      <Lightning />
+      <Arcs />
       <Stacks />
       <ControlRoom />
       <Yard />
