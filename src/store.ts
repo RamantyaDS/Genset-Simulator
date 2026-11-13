@@ -14,6 +14,7 @@ interface UI {
   speed: number;
   panelOpen: boolean;
   focus: string | null; // part the info card describes
+  tour: number | null; // open chapter of the guided tour
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
 }
@@ -26,6 +27,7 @@ export const useUI = createStore<UI>((setState) => ({
   speed: 1,
   panelOpen: true,
   focus: null,
+  tour: null,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),
 }));

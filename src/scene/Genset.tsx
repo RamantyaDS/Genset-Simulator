@@ -54,6 +54,17 @@ function BaseFrame() {
         </group>
       ))}
       <Box s={[1.15, 0.03, 0.3]} m={M.steel} position={[-0.78, 0.33, 0.78]} />
+      {/* lifting lugs at the four corners */}
+      {[-2.75, 2.75].map((x) =>
+        [-1, 1].map((s) => (
+          <mesh key={`${x}${s}`} material={M.yellow} position={[x, 0.36, s * 1.03]}>
+            <torusGeometry args={[0.06, 0.018, 8, 16]} />
+          </mesh>
+        )),
+      )}
+      {/* battery charger */}
+      <Box s={[0.3, 0.35, 0.16]} r={0.01} m={M.white} position={[0.0, 0.5, 0.92]} />
+      <Box s={[0.1, 0.05, 0.01]} m={M.black} position={[0.0, 0.58, 1.0]} />
     </group>
   );
 }
@@ -293,6 +304,23 @@ function Engine() {
       <Cyl r={0.24} l={0.03} m={M.steel} position={[0.74, 2.56, 0]} />
       <BoltRing r={0.2} n={10} m={M.cast} position={[0.74, 2.58, 0]} rotation={[0, 0, Math.PI / 2]} />
 
+      {/* lifting eyes, oil filler and dipstick, wiring loom along the vee */}
+      {[-1.75, 0.55].map((x) => (
+        <mesh key={x} material={M.yellow} position={[x, 2.18, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <torusGeometry args={[0.07, 0.02, 8, 16]} />
+        </mesh>
+      ))}
+      <Cyl r={0.05} l={0.12} m={M.yellow} position={[-1.3, 1.5, 0.58]} />
+      <Cyl r={0.012} l={0.4} m={M.yellow} position={[-0.95, 1.55, 0.6]} rotation={[0.2, 0, 0]} />
+      <Pipe pts={[[-1.8, 2.12, 0.12], [-0.8, 2.14, 0.14], [0.2, 2.12, 0.12], [0.5, 1.95, 0.25]]} r={0.025} m={M.rubber} />
+      <Pipe pts={[[-1.8, 2.12, -0.12], [-0.8, 2.14, -0.14], [0.2, 2.12, -0.12], [0.3, 1.5, -0.62]]} r={0.025} m={M.rubber} />
+      {/* second (charge-air) cooling circuit to the lower radiator section */}
+      <Pipe pts={[[-1.4, 1.92, 0.2], [-1.95, 1.75, 0.65], [-2.38, 1.1, 0.8]]} r={0.055} m={M.rubber} />
+      <Pipe pts={[[-1.4, 1.92, -0.2], [-1.95, 1.7, -0.65], [-2.38, 0.95, -0.82]]} r={0.055} m={M.rubber} />
+      {/* yellow belt guard */}
+      <Box s={[0.05, 0.9, 0.7]} r={0.02} m={M.yellow} position={[-2.18, 1.2, 0]} />
+      {/* engine data plate */}
+      <Box s={[0.18, 0.1, 0.01]} m={M.steel} position={[-0.2, 1.3, 0.556]} />
       {/* charge air coolers sit in the vee */}
       <Box s={[1.6, 0.26, 0.36]} r={0.03} m={M.tealDark} position={[-0.7, 1.92, 0]} />
     </group>

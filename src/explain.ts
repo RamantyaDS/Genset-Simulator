@@ -6,6 +6,8 @@ export function explain(s: State): string {
   if (alarm === 'estop') return 'Tombol emergency stop ditekan. Mesin langsung mati dan tidak bisa dinyalakan sebelum tombolnya dilepas lalu panel di-reset (tekan Stop/Reset).';
   if (alarm === 'failStart') return `Mesin gagal hidup setelah ${TIMERS.attempts} kali mencoba starter. Biasanya karena solar habis, udara masuk ke saluran solar, atau aki lemah. Perbaiki penyebabnya, lalu tekan Stop/Reset.`;
   if (alarm === 'fuelEmpty') return 'Solar habis, mesin mati sendiri. Isi solar, lalu tekan Stop/Reset untuk menghapus alarm.';
+  if (alarm === 'lowOil') return 'Tekanan oli turun di bawah 1,03 bar, jadi panel mematikan mesin seketika. Tanpa oli, bantalan poros engkol bisa rusak dalam hitungan detik. Perbaiki kebocoran, lalu tekan Stop/Reset.';
+  if (alarm === 'highTemp') return 'Suhu air pendingin tembus 96 °C, jadi panel mematikan mesin. Penyebab umumnya radiator kotor atau tersumbat, sabuk kipas putus, atau air pendingin kurang. Tunggu mesin dingin, perbaiki, lalu tekan Stop/Reset.';
   if (alarm === 'overloadTrip') return 'Beban melebihi 110% daya prime selama 5 detik. Panel membuka breaker genset (electrical trip) untuk melindungi mesin dan alternator, lalu mesin didinginkan sebelum mati.';
 
   switch (s.phase) {
@@ -25,6 +27,10 @@ export function explain(s: State): string {
       if (s.sinceStart < TIMERS.safety)
         return `Mesin berputar naik ke 1500 rpm. Selama ${TIMERS.safety} detik pertama (safety delay) panel belum memeriksa tekanan oli dan suhu, karena angkanya memang belum stabil.`;
       if (!genAvailable(s)) return 'Menunggu tegangan dan frekuensi generator stabil sebelum boleh dibebani.';
+      if (s.alarms.includes('highTempWarn')) return `Peringatan: suhu air pendingin ${Math.round(s.coolant)} °C, sudah lewat batas 90 °C. Mesin masih jalan, tapi kalau sampai 96 °C panel akan mematikannya.`;
+      if (s.alarms.includes('lowOilWarn')) return `Peringatan: tekanan oli tinggal ${s.oil.toFixed(1)} bar. Kalau turun di bawah 1,03 bar, mesin dimatikan otomatis.`;
+      if (s.loadBankOn && !s.gcb)
+        return `Tes dengan load bank: genset menanggung ${Math.round(s.genKw)} kW ke kotak pemanas resistor (${Math.round(loadFrac(s) * 100)}%), sementara gedung tetap memakai PLN. Panasnya dibuang oleh kipas load bank. Cara ini membuktikan genset kuat menanggung beban tanpa mengganggu gedung.`;
       if (s.gcb) {
         const lf = loadFrac(s);
         const note =
@@ -35,10 +41,14 @@ export function explain(s: State): string {
               : lf > 0.8
                 ? 'Beban berat tapi masih di zona prime.'
                 : 'Beban nyaman.';
-        return `Genset menanggung ${Math.round(s.genKw)} kW (${Math.round(lf * 100)}% dari ${RATING.primeKw} kW prime). Frekuensi ${hz(s).toFixed(1)} Hz, solar ${Math.round(fuelRate(s))} liter/jam. ${note}`;
+        const test = s.mode === 'test' && s.mainsOk ? 'Mode Test: PLN sebenarnya masih ada, tapi beban gedung sengaja dipindah ke genset untuk menguji transfer. Tekan AUTO untuk mengembalikannya. ' : '';
+        return `${test}Genset menanggung ${Math.round(s.genKw)} kW (${Math.round(lf * 100)}% dari ${RATING.primeKw} kW prime). Frekuensi ${hz(s).toFixed(1)} Hz, solar ${Math.round(fuelRate(s))} liter/jam. ${note}`;
       }
       if (s.mode === 'auto' && s.mainsOk) return `PLN sudah kembali. Panel menunggu ${TIMERS.returnDelay} detik (return delay) untuk memastikan PLN benar-benar stabil sebelum beban dipindah balik.`;
-      if (s.mode === 'manual') return 'Genset siap (Generator Available) tapi belum dibebani. Di mode Manual, tekan tombol transfer ke genset (ikon gelombang ~) untuk memindahkan beban.';
+      if (s.mode === 'manual')
+        return s.mainsOk
+          ? 'Genset menyala tanpa beban, gedung tetap memakai PLN. Ini tes mingguan yang paling umum: memastikan mesin mau hidup dan oli bersirkulasi. Untuk menguji dengan beban, nyalakan load bank, atau tekan transfer ke genset (ikon ~).'
+          : 'Genset siap (Generator Available) tapi belum dibebani. Di mode Manual, tekan tombol transfer ke genset (ikon gelombang ~) untuk memindahkan beban.';
       return 'Genset siap menerima beban.';
     }
     default:

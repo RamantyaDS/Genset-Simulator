@@ -16,13 +16,16 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 
 ## Fitur
 
+- Tur "Cara kerja genset": 13 bab, mulai dari mesin diesel, turbo, pendingin, alternator, bahan bakar, panel DSE, cara menyalakan, saat PLN padam, beban dan kapasitas, proteksi, open vs silent, sampai tes rutin. Kamera menyorot bagian yang dibahas dan setiap bab punya contoh yang bisa dicoba
+- Tes genset tanpa memadamkan PLN: nyalakan tanpa beban (mode Manual), tes beban gedung (mode Test), atau tes dengan load bank
 - Model 3D yang dibangun dari kode, dengan ukuran mengikuti datasheet: base frame, radiator dan kipas, mesin V16 dengan kepala silinder per silinder, turbo, alternator, dan panel
 - Open type dan silent type (kanopi kontainer 40 ft dengan silencer di atap)
 - Panel DSE7320 yang bisa dipencet, dengan tata letak sesuai manual 057-253: mode Stop, Manual, Test, Auto, tombol Start, transfer beban, halaman layar Status, Engine, Generator, Mains, dan Alarms, LED mimic, serta lampu tes
 - Skenario PLN padam memakai urutan dan timer default pabrik DSE: transient 2 detik, start delay 5 detik, crank 10 detik (3 kali percobaan), safety delay 10 detik, transfer 0,7 detik, return delay 30 detik, cooling 60 detik
 - Respons beban: frekuensi dan tegangan turun sesaat saat beban naik, lalu pulih
-- Konsumsi solar sesuai datasheet (246, 349, 470, 529 L/jam di beban 50, 75, 100, 110%)
-- Gangguan: emergency stop, solar habis (gagal start setelah 3 kali percobaan), overload trip
+- Konsumsi solar dari datasheet Perkins 4016-61TRG3 (126, 234, 344, 371, 470, 529 L/jam di beban 25, 50, 75, 80, 100, 110%), plus perkiraan sisa jam operasi dari isi tangki
+- Suhu air pendingin naik perlahan seperti aslinya (pemanas menjaga 45 °C saat siaga, thermostat 80–90 °C saat jalan). Waktu bisa dipercepat 10× atau 30×
+- Gangguan: emergency stop, solar habis (gagal start setelah 3 kali percobaan), overload trip, radiator tersumbat, oli bocor, dengan level proteksi pabrik DSE (suhu: peringatan 90 °C, shutdown 96 °C; oli: peringatan 1,24 bar, shutdown 1,03 bar)
 - X-ray: aliran solar, udara turbo, gas buang, air pendingin, dan listrik
 - Mode bongkar untuk memisahkan radiator, mesin, alternator, dan panel
 - Suara disintesis langsung di browser: pembakaran V16 (200 Hz pada 1500 rpm), motor starter, turbo, kipas, klak breaker, dan buzzer alarm. Suara lebih redam di dalam kanopi silent
@@ -33,9 +36,9 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 
 Spesifikasi diambil dari halaman produk Traknus, datasheet mesin dan genset 4016-61TRG3, datasheet Stamford P734H, serta manual operator DSE7320 MKII. Ada beberapa penyederhanaan:
 
-- Pemanasan mesin dipercepat supaya demo tidak terlalu lama
-- Konsumsi solar di beban 0% dan 25% adalah perkiraan
-- Kapasitas tangki harian 2000 L adalah asumsi
+- Konsumsi solar tanpa beban (40 L/jam) adalah perkiraan; Perkins tidak mencantumkannya
+- Kapasitas tangki harian 2000 L adalah asumsi (unit open type tidak punya tangki bawaan)
+- Timer warm-up dan cooling memakai setelan pabrik DSE; perakit genset bisa mengubahnya
 - Bentuk model mengikuti foto produk, tetapi bukan gambar teknik resmi
 
 ## Pengembangan

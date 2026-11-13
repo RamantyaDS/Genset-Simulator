@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TIMERS, create, genAvailable, hz, pressManual, pressStart, pressStop, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
+import { TIMERS, create, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
 
 const run = (s: State, seconds: number, dt = 0.05) => {
   for (let t = 0; t < seconds; t += dt) step(s, dt);
@@ -101,5 +101,74 @@ describe('manual mode', () => {
     expect(s.rpm).toBe(0);
     pressStart(s);
     expect(s.phase).toBe('rest');
+  });
+});
+
+describe('testing without a mains failure', () => {
+  it('runs off load in manual while the building stays on PLN', () => {
+    const s = create();
+    pressManual(s);
+    pressStart(s);
+    run(s, 25);
+    expect(genAvailable(s)).toBe(true);
+    expect(s.mcb).toBe(true);
+    expect(s.gcb).toBe(false);
+    expect(s.genKw).toBe(0);
+  });
+
+  it('feeds a load bank without touching the building supply', () => {
+    const s = create();
+    pressManual(s);
+    pressStart(s);
+    run(s, 25);
+    s.loadBankOn = true;
+    s.loadBankKw = 900;
+    run(s, 1);
+    expect(s.genKw).toBe(900);
+    expect(s.mcb).toBe(true);
+    expect(fuelRate(s)).toBeCloseTo(234, 0);
+  });
+
+  it('test mode takes the building load, and auto hands it back', () => {
+    const s = create();
+    pressTest(s);
+    pressStart(s);
+    run(s, 25);
+    expect(s.gcb).toBe(true);
+    expect(s.mcb).toBe(false);
+    pressAuto(s);
+    run(s, TIMERS.returnDelay + 2);
+    expect(s.mcb).toBe(true);
+    expect(s.gcb).toBe(false);
+    expect(s.phase).toBe('cooling');
+  });
+});
+
+describe('engine protections', () => {
+  it('shuts down on low oil pressure after the safety delay', () => {
+    const s = create();
+    pressManual(s);
+    pressStart(s);
+    run(s, 25);
+    s.faultOil = true;
+    run(s, 30);
+    expect(s.alarms).toContain('lowOil');
+    expect(s.firing).toBe(false);
+  });
+
+  it('warns then shuts down on high coolant temperature', () => {
+    const s = create();
+    pressTest(s);
+    pressStart(s);
+    run(s, 25);
+    s.faultRadiator = true;
+    let warned = false;
+    for (let t = 0; t < 600 && s.firing; t += 0.1) {
+      step(s, 0.1);
+      if (s.alarms.includes('highTempWarn')) warned = true;
+    }
+    expect(warned).toBe(true);
+    expect(s.alarms).toContain('highTemp');
+    expect(s.coolant).toBeGreaterThanOrEqual(96);
   });
 });

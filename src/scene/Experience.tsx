@@ -10,8 +10,10 @@ import { Canopy, CANOPY, SILENT_STACK } from './Canopy';
 import { PANEL_POS } from './ControlPanel';
 import { Flows } from './Flows';
 import { Genset } from './Genset';
+import { LoadBank } from './LoadBank';
 import { Site } from './Site';
 import { Smoke } from './Smoke';
+import { TourHighlight } from './TourHighlight';
 
 const SILENT_SHIFT = -1.5; // where the set sits inside the container
 
@@ -79,8 +81,10 @@ export function Experience() {
       <group position={shift}>
         <Genset />
         <Flows />
+        <TourHighlight />
       </group>
       {silent && <Canopy />}
+      <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
       <Smoke key={view} at={silent ? SILENT_STACK : [0.74, 2.62, 0]} />
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={45} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />

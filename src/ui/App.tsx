@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { Experience } from '../scene/Experience';
 import { goTo, setInset, type Preset } from '../scene/camera';
 import { FLOW_COLORS } from '../scene/Flows';
-import { RATING, TANK_L, amps, fuelRate, hz, loadFrac, refuel, setEStop, setMains } from '../sim/genset';
+import { RATING, TANK_L, amps, fuelRate, genAvailable, hoursLeft, hz, loadFrac, refuel, setEStop, setMains } from '../sim/genset';
+import { sequence } from '../dse';
 import { initSound, setSound } from '../sound';
 import { sim, useUI } from '../store';
 import { DsePanel } from './DsePanel';
+import { Tour } from './Tour';
+import { startTour } from '../tour';
 
 function Gauges() {
   useUI((s) => s.tick);
@@ -16,7 +19,7 @@ function Gauges() {
     ['Frekuensi', `${hz(sim).toFixed(1)} Hz`],
     ['Tegangan', `${Math.round(sim.volts)} V`],
     ['Arus', `${Math.round(amps(sim))} A`],
-    ['Solar', `${Math.round(fuelRate(sim))} L/jam`, `${Math.round((sim.fuel / TANK_L) * 100)}% tangki`],
+    ['Solar', `${Math.round(fuelRate(sim))} L/jam`, `${Math.round((sim.fuel / TANK_L) * 100)}% tangki${isFinite(hoursLeft(sim)) ? ` · ${hoursLeft(sim).toFixed(1)} jam` : ''}`],
     ['Air pendingin', `${Math.round(sim.coolant)} °C`],
     ['Oli', `${sim.oil.toFixed(1)} bar`],
   ];
@@ -36,6 +39,10 @@ function Gauges() {
 function Controls() {
   const ui = useUI();
   const [sound, setSnd] = useState(true);
+  const run = (ids: Parameters<typeof sequence>[1]) => {
+    ui.set({ panelOpen: true });
+    sequence(sim, ids);
+  };
   const lfMarks = [
     [RATING.baseKw, 'base'],
     [RATING.primeKw, 'prime'],
@@ -59,6 +66,7 @@ function Controls() {
           Beban gedung <b>{ui.tick >= 0 && Math.round(sim.demandKw)} kW</b>
         </span>
         <input
+          aria-label="Beban gedung"
           type="range"
           min={0}
           max={2200}
@@ -78,12 +86,68 @@ function Controls() {
         </div>
       </label>
 
+      <h2>Tes genset (PLN tetap menyala)</h2>
+      <div className="row">
+        <button onClick={() => run(['manual', 'start'])}>
+          Nyalakan tanpa beban
+        </button>
+        <button onClick={() => run(['test', 'start'])}>
+          Tes beban gedung
+        </button>
+      </div>
+      <div className="row">
+        <button onClick={() => run(['auto'])}>
+          Selesai tes (Auto)
+        </button>
+        <button onClick={() => run(['stop'])}>
+          Stop
+        </button>
+      </div>
+      <label className="slider">
+        <span>
+          <span>
+            <input
+              aria-label="Nyalakan load bank"
+              type="checkbox"
+              checked={sim.loadBankOn}
+              disabled={!genAvailable(sim) && !sim.loadBankOn}
+              onChange={(e) => {
+                sim.loadBankOn = e.target.checked;
+                ui.bump();
+              }}
+            />{' '}
+            Load bank
+          </span>
+          <b>{Math.round(sim.loadBankKw)} kW</b>
+        </span>
+        <input
+          aria-label="Daya load bank"
+          type="range"
+          min={0}
+          max={2000}
+          step={50}
+          value={sim.loadBankKw}
+          onChange={(e) => {
+            sim.loadBankKw = +e.target.value;
+            ui.bump();
+          }}
+        />
+      </label>
+
       <h2>Gangguan</h2>
       <div className="row">
         <button className={sim.eStop ? 'on danger' : ''} onClick={() => setEStop(sim, !sim.eStop)}>
           {sim.eStop ? 'Lepas E-stop' : '🛑 Emergency stop'}
         </button>
         <button onClick={() => (sim.fuel > 0 ? (sim.fuel = 0) : refuel(sim))}>{sim.fuel > 0 ? 'Kuras solar' : '⛽ Isi solar'}</button>
+      </div>
+      <div className="row">
+        <button className={sim.faultRadiator ? 'on danger' : ''} onClick={() => (sim.faultRadiator = !sim.faultRadiator)}>
+          Radiator tersumbat
+        </button>
+        <button className={sim.faultOil ? 'on danger' : ''} onClick={() => (sim.faultOil = !sim.faultOil)}>
+          Oli bocor
+        </button>
       </div>
 
       <h2>Tampilan</h2>
@@ -117,8 +181,12 @@ function Controls() {
         ))}
       </div>
       <div className="row">
-        <button className={ui.speed > 1 ? 'on' : ''} onClick={() => ui.set({ speed: ui.speed > 1 ? 1 : 5 })}>
-          {ui.speed > 1 ? 'Waktu 5×' : 'Waktu 1×'}
+        <button
+          className={ui.speed > 1 ? 'on' : ''}
+          title="Percepat waktu, misalnya untuk melihat mesin memanas atau solar berkurang"
+          onClick={() => ui.set({ speed: ui.speed === 1 ? 10 : ui.speed === 10 ? 30 : 1 })}
+        >
+          Waktu {ui.speed}×
         </button>
         <button
           onClick={() => {
@@ -146,6 +214,7 @@ function Controls() {
 export function App() {
   const [started, setStarted] = useState(false);
   const panelOpen = useUI((s) => s.panelOpen);
+  const tour = useUI((s) => s.tour);
   // Phones show one sheet at a time: the controls, or the DSE panel.
   const [narrow, setNarrow] = useState(() => innerWidth <= 900);
   useEffect(() => {
@@ -155,22 +224,28 @@ export function App() {
     return () => removeEventListener('resize', f);
   }, []);
   useEffect(() => {
+    if (tour !== null) return; // the tour sets its own framing
     // Keep the camera framing clear of the side panels (desktop) or the bottom sheets (phone).
     const fit = () => (innerWidth > 900 ? setInset(322, panelOpen ? 472 : 0, 0) : setInset(0, 0, innerHeight * 0.3));
     fit();
     addEventListener('resize', fit);
     return () => removeEventListener('resize', fit);
-  }, [panelOpen]);
+  }, [panelOpen, tour]);
   return (
     <>
       <Experience />
       <header className="brand">
         <h1>Genset 2250 kVA</h1>
         <p>Perkins 4016-61TRG3 · Stamford P734H · DSE7320</p>
+        {tour === null && (
+          <button className="tour-start" onClick={startTour}>
+            ▶ Cara kerja genset
+          </button>
+        )}
       </header>
       <Gauges />
-      {!(narrow && panelOpen) && <Controls />}
-      {panelOpen && <DsePanel />}
+      {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
+      {panelOpen && !(narrow && tour !== null) && <DsePanel />}
       {!started && (
         <div className="intro">
           <div>

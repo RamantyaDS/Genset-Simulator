@@ -13,12 +13,14 @@ export const RATING = {
   hz: 50,
 };
 
-// Fuel use from the genset datasheet (L/h at % of prime). 0% and 25% are estimates, the rest are listed values.
-const FUEL_CURVE: [number, number][] = [
-  [0, 45],
-  [0.25, 140],
-  [0.5, 246],
-  [0.75, 349],
+// Fuel use in L/h against fraction of prime power, from the Perkins 4016-61TRG3 datasheet (25/50/75%, base load,
+// prime, standby). No-load at rated speed is not published; 40 L/h is an estimate.
+export const FUEL_CURVE: [number, number][] = [
+  [0, 40],
+  [0.25, 126],
+  [0.5, 234],
+  [0.75, 344],
+  [0.8, 371],
   [1, 470],
   [1.1, 529],
 ];
@@ -50,7 +52,17 @@ export type Phase =
   | 'cooling'
   | 'stopping';
 
-export type AlarmId = 'failStart' | 'lowFuel' | 'fuelEmpty' | 'overload' | 'overloadTrip' | 'estop' | 'highTemp';
+export type AlarmId =
+  | 'failStart'
+  | 'lowFuel'
+  | 'fuelEmpty'
+  | 'overload'
+  | 'overloadTrip'
+  | 'estop'
+  | 'highTempWarn'
+  | 'highTemp'
+  | 'lowOilWarn'
+  | 'lowOil';
 export const ALARMS: Record<AlarmId, { text: string; kind: 'warning' | 'trip' | 'shutdown' }> = {
   failStart: { text: 'Fail to start', kind: 'shutdown' },
   lowFuel: { text: 'Low fuel level', kind: 'warning' },
@@ -58,8 +70,14 @@ export const ALARMS: Record<AlarmId, { text: string; kind: 'warning' | 'trip' | 
   overload: { text: 'kW overload', kind: 'warning' },
   overloadTrip: { text: 'kW overload trip', kind: 'trip' },
   estop: { text: 'Emergency stop', kind: 'shutdown' },
-  highTemp: { text: 'High coolant temp', kind: 'shutdown' },
+  highTempWarn: { text: 'Coolant Temp High', kind: 'warning' },
+  highTemp: { text: 'Coolant Temp High', kind: 'shutdown' },
+  lowOilWarn: { text: 'Oil Pressure Low', kind: 'warning' },
+  lowOil: { text: 'Oil Pressure Low', kind: 'shutdown' },
 };
+
+// DSE7320 factory protection levels (config suite 057-243).
+export const PROTECT = { tempWarn: 90, tempShut: 96, oilWarn: 1.24, oilShut: 1.03 };
 
 export type SimEvent = 'beep' | 'gcbClose' | 'gcbOpen' | 'mcbClose' | 'mcbOpen' | 'starterOn' | 'starterOff' | 'fire' | 'alarm' | 'mainsFail' | 'mainsReturn';
 
@@ -95,6 +113,10 @@ export interface State {
   alarms: AlarmId[];
   eStop: boolean;
   transferIn: number; // seconds until the generator breaker closes after a manual transfer, -1 when idle
+  loadBankOn: boolean; // portable resistive load bank, used to test the set without touching the building supply
+  loadBankKw: number;
+  faultRadiator: boolean; // blocked radiator / slipping fan belt: coolant overheats
+  faultOil: boolean; // oil leak: pressure falls
   events: SimEvent[];
 }
 
@@ -131,6 +153,10 @@ export function create(): State {
     alarms: [],
     eStop: false,
     transferIn: -1,
+    loadBankOn: false,
+    loadBankKw: 900,
+    faultRadiator: false,
+    faultOil: false,
     events: [],
   };
 }
@@ -241,7 +267,8 @@ function stopEngine(s: State) {
 export function pressStop(s: State) {
   emit(s, 'beep');
   // Second press with the engine at rest resets latched alarms.
-  if (s.mode === 'stop' && s.rpm < 1 && !s.eStop) s.alarms = [];
+  if (s.mode === 'stop' && s.rpm < 1)
+    s.alarms = s.alarms.filter((a) => (a === 'estop' && s.eStop) || (a === 'fuelEmpty' && s.fuel <= 0) || (a === 'highTemp' && s.coolant >= PROTECT.tempShut));
   s.mode = 'stop';
   stopEngine(s);
   if (s.mainsOk) setMcb(s, true);
@@ -301,6 +328,9 @@ export function setMains(s: State, ok: boolean) {
   s.mainsBackFor = 0;
   emit(s, ok ? 'mainsReturn' : 'mainsFail');
 }
+
+/** Runtime left on the tank at the present burn rate, in hours (Infinity when not burning). */
+export const hoursLeft = (s: State) => (fuelRate(s) > 0 ? s.fuel / fuelRate(s) : Infinity);
 
 export function refuel(s: State) {
   s.fuel = TANK_L;
@@ -415,8 +445,9 @@ export function step(s: State, dt: number) {
   if (s.firing) s.sinceStart += dt;
   if (s.phase === 'stopping' && s.rpm === 0) s.phase = 'rest';
 
-  // Load.
-  s.genKw = s.gcb && s.firing ? s.demandKw : 0;
+  // Load: the building through the generator breaker, plus the load bank when it is switched in.
+  if (s.loadBankOn && !genAvailable(s) && s.sinceStart > TIMERS.safety + 5) s.loadBankOn = false;
+  s.genKw = s.firing ? (s.gcb ? s.demandKw : 0) + (s.loadBankOn && genAvailable(s) ? s.loadBankKw : 0) : 0;
   const stepFrac = (s.genKw - prevKw) / RATING.primeKw;
   if (Math.abs(stepFrac) > 0.001) {
     // Governor and AVR react to a load step: speed and voltage sag, then recover (ISO 8528 G2-like).
@@ -439,10 +470,14 @@ export function step(s: State, dt: number) {
 
   // Gauges.
   const lf = loadFrac(s);
-  const coolTarget = s.firing ? 78 + 12 * lf : 45;
-  s.coolant += (coolTarget - s.coolant) * Math.min(1, dt / (s.firing ? 40 : 300));
-  const oilTarget = s.rpm > 600 ? 4.6 - 0.02 * (s.coolant - 75) : s.rpm > 50 ? 0.4 + 0.004 * s.rpm : 0;
-  s.oil += (oilTarget - s.oil) * Math.min(1, dt / 0.8);
+  // Coolant: a jacket-water heater keeps a standby set at ~45 °C; running, the thermostat holds 80–90 °C depending on load.
+  // A blocked radiator lets it climb past the alarm levels.
+  const coolTarget = s.firing ? (s.faultRadiator ? 112 : 79 + 10 * lf) : 45;
+  const coolTau = s.firing ? (s.coolant < 75 && !s.faultRadiator ? 240 : 90) : 900;
+  s.coolant += (coolTarget - s.coolant) * Math.min(1, dt / coolTau);
+  const oilNorm = s.rpm > 600 ? 4.6 - 0.02 * (s.coolant - 75) : s.rpm > 50 ? 0.4 + 0.004 * s.rpm : 0;
+  const oilTarget = s.faultOil && s.rpm > 50 ? oilNorm * 0.18 : oilNorm;
+  s.oil += (oilTarget - s.oil) * Math.min(1, dt / (s.faultOil ? 6 : 0.8));
   const batTarget = s.starter ? 19.6 : s.firing && s.rpm > 900 ? 27.6 : 25.6;
   s.battery += (batTarget - s.battery) * Math.min(1, dt / (s.starter ? 0.15 : 2));
 
@@ -471,6 +506,16 @@ export function step(s: State, dt: number) {
     }
   } else s.overloadFor = 0;
   if (s.alarms.includes('overloadTrip') && s.rpm === 0) clear(s, 'overloadTrip');
+
+  // Engine protections, armed once the safety-on delay has passed.
+  if (s.firing && s.sinceStart >= TIMERS.safety) {
+    if (s.coolant >= PROTECT.tempShut) raise(s, 'highTemp');
+    else if (s.coolant >= PROTECT.tempWarn) raise(s, 'highTempWarn');
+    if (s.oil <= PROTECT.oilShut) raise(s, 'lowOil');
+    else if (s.oil <= PROTECT.oilWarn) raise(s, 'lowOilWarn');
+  }
+  if (s.coolant < PROTECT.tempWarn - 2) clear(s, 'highTempWarn');
+  if (s.oil > PROTECT.oilWarn + 0.14 || s.rpm === 0) clear(s, 'lowOilWarn');
 
   // A shutdown alarm stops the engine at once.
   if (shutdownActive(s) && (s.firing || s.starter)) stopEngine(s);

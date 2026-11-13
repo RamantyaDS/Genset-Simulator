@@ -102,6 +102,11 @@ export function press(s: State, id: ButtonId) {
   s.events.push('beep');
 }
 
+/** Presses panel buttons one after another, slowly enough to watch (used by the scenario shortcuts). */
+export function sequence(s: State, ids: ButtonId[], gap = 700) {
+  ids.forEach((id, i) => setTimeout(() => press(s, id), 300 + i * gap));
+}
+
 /** Jump to the alarm page when a new alarm appears, as the module does. */
 export function showAlarms(s: State) {
   ui.buzzer = true;
@@ -207,11 +212,12 @@ export function drawModule(g: CanvasRenderingContext2D, s: State) {
   lines.slice(ui.scroll, ui.scroll + 3).forEach((l, i) => g.fillText(l, 336, 256 + i * 36));
 
   // four configurable LEDs with insert labels: used here for common alarms
+  const has = (...a: string[]) => s.alarms.some((x) => a.includes(x));
   const alarmLeds: [string, boolean][] = [
-    ['Low fuel', s.alarms.includes('lowFuel') || s.alarms.includes('fuelEmpty')],
-    ['Overload', s.alarms.includes('overload') || s.alarms.includes('overloadTrip')],
-    ['Fail to start', s.alarms.includes('failStart')],
-    ['Emergency stop', s.alarms.includes('estop')],
+    ['Low fuel', has('lowFuel', 'fuelEmpty')],
+    ['Overload', has('overload', 'overloadTrip')],
+    ['Oil / temp', has('lowOil', 'lowOilWarn', 'highTemp', 'highTempWarn')],
+    ['Emergency stop', has('estop', 'failStart') && s.eStop],
   ];
   alarmLeds.forEach(([label, on], i) => {
     const y = 204 + i * 40;
