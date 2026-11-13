@@ -21,7 +21,9 @@ import {
   stopUnit,
   TANK_L,
 } from '../sim/plant';
-import { consoleSeg, SEGMENTS } from './camera';
+import { ARC_CX, consoleSeg, SEGMENTS } from './camera';
+
+const BOARD = { r: 10.6, span: 0.42, n: 6, h: 2.7, y: 1.1 };
 import { plant } from './store';
 
 const LABEL = '#1d2228';
@@ -372,14 +374,31 @@ function MimicBoard() {
     drawMimic(m.c.getContext('2d')!);
     m.t.needsUpdate = true;
   });
-  const h = (8.4 * MH) / MW;
+  // The board follows the same arc as the console, in six flat sections, each showing its slice of the drawing.
+  const sections = useMemo(
+    () =>
+      Array.from({ length: BOARD.n }, (_, j) => {
+        const a0 = -BOARD.span + (j * 2 * BOARD.span) / BOARD.n;
+        const a1 = a0 + (2 * BOARD.span) / BOARD.n;
+        const a = (a0 + a1) / 2;
+        const w = 2 * BOARD.r * Math.sin((a1 - a0) / 2);
+        const geo = new THREE.PlaneGeometry(w, BOARD.h);
+        const uv = geo.attributes.uv as THREE.BufferAttribute;
+        for (let k = 0; k < uv.count; k++) uv.setX(k, (j + uv.getX(k)) / BOARD.n);
+        return { geo, w, x: ARC_CX + BOARD.r * Math.cos(a), z: BOARD.r * Math.sin(a), rot: Math.atan2(-Math.cos(a), -Math.sin(a)) };
+      }),
+    [],
+  );
   return (
-    <group position={[4.38, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
-      <Box s={[8.7, h + 0.2, 0.08]} m={M.greyLight} position={[0, 1.15 + h / 2, -0.04]} />
-      <mesh position={[0, 1.15 + h / 2, 0.005]}>
-        <planeGeometry args={[8.4, h]} />
-        <meshBasicMaterial map={m.t} toneMapped={false} />
-      </mesh>
+    <group>
+      {sections.map((q, j) => (
+        <group key={j} position={[q.x, BOARD.y + BOARD.h / 2, q.z]} rotation={[0, q.rot, 0]}>
+          <Box s={[q.w + 0.02, BOARD.h + 0.2, 0.08]} m={M.greyLight} position={[0, 0, -0.045]} />
+          <mesh geometry={q.geo} position={[0, 0, 0.002]}>
+            <meshBasicMaterial map={m.t} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
@@ -400,7 +419,7 @@ function UpsRoom() {
     });
   });
   return (
-    <group position={[2.6, 0, 5.45]} rotation={[0, Math.PI, 0]}>
+    <group position={[-1.6, 0, 5.45]} rotation={[0, Math.PI, 0]}>
       <Box s={[0.8, 1.9, 0.75]} r={0.02} m={M.white} position={[0, 0.95, 0]} />
       <Box s={[0.7, 0.04, 0.01]} m={M.blue} position={[0, 1.78, 0.38]} />
       <mesh position={[0, 1.45, 0.38]}>

@@ -9,6 +9,7 @@ interface PlantUI {
   tick: number;
   selected: number;
   inspect: boolean; // close-up of the selected set with the single-set tools
+  hideUi: boolean; // overlays hidden (seated in the control room, or by the user)
   cam: PlantCam;
   toast: string;
   toastUntil: number;
@@ -20,6 +21,7 @@ export const usePlant = createStore<PlantUI>((set) => ({
   tick: 0,
   selected: 0,
   inspect: false,
+  hideUi: false,
   cam: 'hall',
   toast: '',
   toastUntil: 0,

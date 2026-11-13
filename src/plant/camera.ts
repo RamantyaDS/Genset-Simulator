@@ -58,6 +58,7 @@ export function leaveInspect() {
 /** Control room origin in the plant, and the console arc in room coordinates (board on the +x wall). */
 const ROOM_X = 32;
 const ARC = { cx: -6.4, r: 8.6, span: 0.5 };
+export const ARC_CX = ARC.cx;
 export const SEGMENTS = 6;
 
 /** Position and heading of console segment k (0–4 the sets, 5 the bus), room coordinates. */
@@ -73,7 +74,8 @@ export function goSeat(k: number) {
   const { x, z, rot } = consoleSeg(k);
   const fx = -Math.sin(rot); // facing direction (toward the board)
   const fz = -Math.cos(rot);
-  const eye = [ROOM_X + x - fx * 1.25, 1.3, z - fz * 1.25];
-  const look = [ROOM_X + 4.3, 1.45, z * 0.5]; // over the desk to the part of the mimic board in front of this seat
+  // straight ahead, square to this desk segment and to the board section in front of it
+  const eye = [ROOM_X + x - fx * 2.0, 1.5, z - fz * 2.0];
+  const look = [eye[0] + fx * 5, 1.45, eye[2] + fz * 5];
   cams.current?.setLookAt(eye[0], eye[1], eye[2], look[0], look[1], look[2], true);
 }
