@@ -45,7 +45,9 @@ Tombol "Mode pembangkit 5 unit" (atau `?mode=plant`) membuka PLTD kecil: lima ge
 - Kontrol otomatis (load demand): menyalakan unit berikutnya saat beban di atas 80% kapasitas dan mematikan unit saat beban cukup ditanggung unit yang tersisa
 - Jam dipercepat (1, 5, atau 20 menit simulasi per detik) untuk melihat profil beban sehari, konsumsi solar, efisiensi L/kWh, dan pengisian tangki lewat truk
 - Kelima genset memakai model 3D detail yang sama dengan mode genset tunggal. Tombol 🔍 (atau klik genset di hall) mendekati satu unit dengan semua fitur genset tunggal: gauge mesin, bongkar dua level, X-ray aliran, info komponen, panel DSE7320 unit itu, heat shimmer, serta gangguan per unit (emergency stop, radiator tersumbat, oli bocor) yang memicu shutdown seperti aslinya
-- Siang dan malam, lampu rumah dan pabrik hanya menyala bila feeder-nya bertegangan, ruang kontrol dengan layar SCADA, gangguan acak untuk latihan
+- Beban per unit: "bagi rata" (isochronous) atau base load dengan setelan kW, untuk memaksa satu genset sampai beban penuh. Load bank 0–2000 kW per unit untuk tes seperti genset tunggal; di atas 110% selama 5 detik genset trip overload
+- Tangki harian 2000 L di samping tiap genset, diisi pompa transfer dari tangki induk 60.000 L (mulai mengisi di bawah 60%, berhenti di 95%). Tangki harian kosong mematikan genset
+- Tampilan selalu malam supaya lampu hall, rumah, pabrik, dan lampu jalan terlihat; jam dan profil beban tetap berjalan sepanjang hari. Lampu rumah dan pabrik hanya menyala bila feeder-nya bertegangan, ruang kontrol dengan layar SCADA, gangguan acak untuk latihan
 
 Catatan: pada instalasi nyata, paralel genset memakai pengendali seperti DSE8610 MKII (DSE7320 tidak bisa paralel). Profil beban kawasan adalah perkiraan, bukan data pabrik tertentu.
 

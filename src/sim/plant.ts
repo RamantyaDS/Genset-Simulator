@@ -14,6 +14,10 @@ export const NOMINAL_V = 400;
 export const SYNC = { hz: 0.2, volts: 0.04, deg: 15 }; // check-synchroniser window
 export const TANK_L = 60000; // bulk storage
 export const TRUCK_L = 16000;
+export const DAY_L = 2000; // day tank beside each set, filled from the bulk tanks by a transfer pump
+export const PUMP_LPH = 3000; // transfer pump, litres per (simulated) hour
+const PUMP_ON = 0.6; // level switch: pump starts below 60%, stops at 95%
+const PUMP_OFF = 0.95;
 
 export type UnitPhase = 'rest' | 'crank' | 'running' | 'cooling' | 'stopping';
 
@@ -40,6 +44,15 @@ export interface Unit {
   eStop: boolean;
   faultRadiator: boolean; // blocked radiator / slipping fan belt: coolant overheats
   faultOil: boolean; // oil leak: pressure falls
+  baseKw: number; // 0: isochronous load sharing; otherwise a fixed kW output (base load mode on the paralleling controller)
+  loadBank: boolean; // portable resistive load bank on the set's terminals, for testing it like the single set
+  loadBankKw: number;
+  overloadFor: number;
+  dipF: number; // off-bus speed dip after a load step (fraction), damped spring
+  dipFv: number;
+  dayTank: number; // litres
+  pumpAuto: boolean; // transfer pump on its level switch (off: the day tank is not refilled)
+  pumping: boolean;
 }
 
 export interface Feeder {
@@ -128,6 +141,15 @@ export function create(): Plant {
       eStop: false,
       faultRadiator: false,
       faultOil: false,
+      baseKw: 0,
+      loadBank: false,
+      loadBankKw: 900,
+      overloadFor: 0,
+      dipF: 0,
+      dipFv: 0,
+      dayTank: DAY_L * (0.85 + 0.03 * i),
+      pumpAuto: true,
+      pumping: false,
     })),
     feeders: FEEDERS.map(([name, short, shedOrder], id) => ({ id, name, short, shedOrder, on: false, demand: 0, outageMin: 0 })),
     busHz: 0,
@@ -158,21 +180,25 @@ export function create(): Plant {
 export const online = (p: Plant) => p.units.filter((u) => u.breaker);
 export const busLive = (p: Plant) => online(p).length > 0;
 export const loadKw = (p: Plant) => (busLive(p) ? p.feeders.reduce((a, f) => a + (f.on ? f.demand : 0), 0) : 0);
+/** Load banks hang on the set side of the breaker, so a closed breaker puts them on the bus. */
+export const bankKw = (u: Unit) => (u.loadBank && available(u) ? u.loadBankKw : 0);
+export const busLoadKw = (p: Plant) => loadKw(p) + online(p).reduce((a, u) => a + bankKw(u), 0);
 export const demandKw = (p: Plant) => p.feeders.reduce((a, f) => a + f.demand, 0);
 export const capacityKw = (p: Plant) => online(p).length * PRIME_KW;
 export const available = (u: Unit) => u.phase === 'running' && u.rpm > 1450 && u.volts > 360;
 export const hourOf = (p: Plant) => p.clock / 60;
-export const fuelRateL = (p: Plant) =>
-  p.units.reduce((a, u) => {
-    if (u.phase !== 'running' && u.phase !== 'cooling') return a;
-    const x = Math.min(1.1, u.kw / PRIME_KW);
-    for (let i = 1; i < FUEL_CURVE.length; i++) {
-      const [x0, y0] = FUEL_CURVE[i - 1];
-      const [x1, y1] = FUEL_CURVE[i];
-      if (x <= x1) return a + y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-    }
-    return a + FUEL_CURVE[FUEL_CURVE.length - 1][1];
-  }, 0);
+/** One set's burn, litres per hour, from the datasheet fuel curve. */
+export const unitFuelL = (u: Unit) => {
+  if (u.phase !== 'running' && u.phase !== 'cooling') return 0;
+  const x = Math.min(1.1, u.kw / PRIME_KW);
+  for (let i = 1; i < FUEL_CURVE.length; i++) {
+    const [x0, y0] = FUEL_CURVE[i - 1];
+    const [x1, y1] = FUEL_CURVE[i];
+    if (x <= x1) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+  }
+  return FUEL_CURVE[FUEL_CURVE.length - 1][1];
+};
+export const fuelRateL = (p: Plant) => p.units.reduce((a, u) => a + unitFuelL(u), 0);
 /** Synchronising differences of an incoming set against the live bus. */
 export function syncDiff(p: Plant, u: Unit) {
   const deg = ((((u.angle * 180) / Math.PI) % 360) + 540) % 360 - 180;
@@ -187,7 +213,7 @@ export function startUnit(p: Plant, i: number) {
   const u = p.units[i];
   if (u.eStop) return say(p, `Emergency stop genset ${i + 1} masih ditekan. Lepas dulu.`);
   if (u.alarm) return say(p, `Genset ${i + 1} masih ada alarm (${u.alarm}). Reset dulu.`);
-  if (p.fuel <= 0) return say(p, 'Solar habis. Panggil truk tangki.');
+  if (u.dayTank <= 1) return say(p, `Tangki harian G${i + 1} kosong. Isi dulu dari tangki induk.`);
   if (u.phase !== 'rest') return;
   u.phase = 'crank';
   u.timer = 2.5;
@@ -208,6 +234,17 @@ export function stopUnit(p: Plant, i: number) {
 export function resetUnit(p: Plant, i: number) {
   const u = p.units[i];
   if (u.rpm < 1 && !u.eStop) u.alarm = null;
+}
+
+/** Drain a day tank (fault drill) or refill it at once from the bulk tanks. */
+export function drainDayTank(p: Plant, i: number) {
+  p.units[i].dayTank = 0;
+}
+export function fillDayTank(p: Plant, i: number) {
+  const u = p.units[i];
+  const move = Math.min(p.fuel, DAY_L - u.dayTank);
+  u.dayTank += move;
+  p.fuel -= move;
 }
 
 /** Mushroom button on the set: cuts fuel at once, whatever the set is doing; latched until released and reset. */
@@ -358,8 +395,17 @@ export function step(p: Plant, dt: number) {
     }
     const running = u.phase === 'running' || u.phase === 'cooling';
     if (running && !u.breaker) {
-      const target = (NOMINAL_HZ + u.setHz) * 30;
+      // Off the bus the set carries only its load bank: governor dip on each step, sag when overloaded.
+      const prevKw = u.kw;
+      u.kw = bankKw(u);
+      const stepFrac = (u.kw - prevKw) / PRIME_KW;
+      if (Math.abs(stepFrac) > 0.001) u.dipFv -= stepFrac * 0.32;
+      u.dipFv += (-2.6 * 2.6 * u.dipF - 2 * 0.55 * 2.6 * u.dipFv) * dt;
+      u.dipF += u.dipFv * dt;
+      const sag = u.kw > LIMIT_KW ? (6 * (u.kw - LIMIT_KW)) / LIMIT_KW : 0;
+      const target = (NOMINAL_HZ + u.setHz - sag) * 30;
       u.rpm += Math.sign(target - u.rpm) * Math.min(Math.abs(target - u.rpm), dt * 260);
+      if (u.rpm > 1350) u.rpm = target * (1 + u.dipF);
       u.hz = u.rpm / 30;
       const vT = u.rpm > 1100 ? NOMINAL_V * (1 + u.setV) * Math.min(1, u.rpm / 1500) : 12;
       u.volts += (vT - u.volts) * Math.min(1, dt / 0.6);
@@ -374,6 +420,7 @@ export function step(p: Plant, dt: number) {
       u.volts = Math.max(0, u.volts - dt * 400);
       if (u.rpm === 0) u.phase = 'rest';
     }
+    if (!running) u.kw = 0;
     if (u.phase === 'rest') {
       u.rpm = 0;
       u.hz = 0;
@@ -394,11 +441,21 @@ export function step(p: Plant, dt: number) {
   // Bus: isochronous load sharing holds 50 Hz while the sets can carry the load; beyond that it sags.
   const on = online(p);
   const load = loadKw(p);
+  const busLoad = busLoadKw(p);
   if (on.length) {
     const limit = on.length * LIMIT_KW;
-    const share = load / on.length;
-    for (const u of on) u.kw = share;
-    const sag = load > limit ? (6 * (load - limit)) / limit : 0;
+    // Sets in base load hold their kW setting; the isochronous ones share the rest. With no isochronous set left
+    // nothing holds the frequency, so they all share; base settings larger than the load are scaled down.
+    const base = on.filter((u) => u.baseKw > 0);
+    const iso = on.filter((u) => u.baseKw <= 0);
+    if (iso.length) {
+      const want = base.reduce((a, u) => a + u.baseKw, 0);
+      const k = want > busLoad ? busLoad / want : 1;
+      for (const u of base) u.kw = u.baseKw * k;
+      const share = (busLoad - want * k) / iso.length;
+      for (const u of iso) u.kw = share;
+    } else for (const u of on) u.kw = busLoad / on.length;
+    const sag = busLoad > limit ? (6 * (busLoad - limit)) / limit : 0;
     // damped recovery of load-step dips
     const w = 2.4;
     const z = 0.6;
@@ -436,14 +493,6 @@ export function step(p: Plant, dt: number) {
       p.stats.trips += on.length;
       blackout(p);
     }
-    // Sustained overload trips one set after a while (its electrical protection).
-    if (share > LIMIT_KW * 1.05 && on.length) {
-      p.demandT += dt;
-      if (p.demandT > 8) {
-        p.demandT = 0;
-        tripUnit(p, on[on.length - 1].id, 'kW overload');
-      }
-    } else p.demandT = 0;
   } else {
     p.busHz = 0;
     p.busV = 0;
@@ -465,6 +514,15 @@ export function step(p: Plant, dt: number) {
     const oilT = u.faultOil && u.rpm > 50 ? oilNorm * 0.18 : oilNorm;
     u.oil += (oilT - u.oil) * Math.min(1, dt / (u.faultOil ? 6 : 0.8));
     u.kwh += u.kw * (simMin / 60);
+    // Overload protection as on the single set: above 110% of prime for 5 s the set trips.
+    if (u.phase === 'running' && u.kw > PRIME_KW * 1.1) {
+      u.overloadFor += dt;
+      if (u.overloadFor >= 5) {
+        u.overloadFor = 0;
+        tripUnit(p, u.id, 'kW overload');
+      }
+    } else u.overloadFor = 0;
+    if (!available(u) && u.phase !== 'running') u.loadBank = false;
     if (u.phase === 'running' && u.rpm > 1200) {
       // DSE factory shutdown levels, as on the single set
       if (u.coolant > 96) tripUnit(p, u.id, 'Suhu air pendingin tinggi');
@@ -474,11 +532,29 @@ export function step(p: Plant, dt: number) {
 
   // Fuel and energy on the fast clock.
   const hrs = simMin / 60;
-  const litres = fuelRateL(p) * hrs;
-  p.fuel = Math.max(0, p.fuel - litres);
+  let litres = 0;
+  for (const u of p.units) {
+    // Each engine draws from its own day tank; the transfer pump tops it up from the bulk tanks.
+    const burn = Math.min(u.dayTank, unitFuelL(u) * hrs);
+    u.dayTank -= burn;
+    litres += burn;
+    if (u.pumpAuto && u.dayTank < DAY_L * PUMP_ON) u.pumping = true;
+    if (!u.pumpAuto || u.dayTank >= DAY_L * PUMP_OFF || p.fuel <= 0) u.pumping = false;
+    if (u.pumping) {
+      const move = Math.min(PUMP_LPH * hrs, p.fuel, DAY_L - u.dayTank);
+      u.dayTank += move;
+      p.fuel -= move;
+    }
+    if (u.dayTank <= 0 && (u.phase === 'running' || u.phase === 'crank')) {
+      if (u.phase === 'running') tripUnit(p, u.id, 'Solar habis');
+      else {
+        u.phase = 'stopping';
+        u.alarm = 'Solar habis';
+      }
+    }
+  }
   p.stats.litres += litres;
   p.stats.kwh += load * hrs;
-  if (p.fuel <= 0) for (const u of p.units) if (u.phase === 'running') tripUnit(p, u.id, 'Solar habis');
   if (p.truckEta >= 0) {
     p.truckEta -= dt;
     if (p.truckEta < 0) {

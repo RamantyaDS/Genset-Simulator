@@ -199,7 +199,7 @@
   top: 132px;
   right: 16px;
   width: 360px;
-  max-height: calc(100vh - 150px);
+  max-height: calc(100vh - 196px);
   overflow-y: auto;
 }
 .p-detail-head {
@@ -236,6 +236,39 @@
 .p-gauges small {
   font-size: 10.5px;
   color: var(--dim);
+}
+.p-slider {
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.p-range {
+  width: 100%;
+}
+.p-lb {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.p-tank {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  background: #ffffff12;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.p-tank em {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #c9a23a;
+}
+.p-tank span {
+  position: relative;
+  font-size: 11.5px;
+  line-height: 22px;
+  padding-left: 8px;
 }
 .p-detail .hint {
   color: var(--dim);

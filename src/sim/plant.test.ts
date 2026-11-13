@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { busLive, closeBreaker, create, loadKw, online, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
+import { busLive, closeBreaker, create, DAY_L, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
 
 const run = (p: Plant, s: number, dt = 0.02) => {
   for (let t = 0; t < s; t += dt) step(p, dt);
@@ -104,5 +104,55 @@ describe('faults on one set', () => {
     expect(p.units[2].alarm).toBe('Emergency stop');
     startUnit(p, 2);
     expect(p.units[2].phase).toBe('rest'); // latched until released
+  });
+});
+
+describe('testing one set like the single set', () => {
+  it('a load bank loads a set off the bus, and overload above 110% trips it', () => {
+    const p = create();
+    warm(p, 0);
+    const u = p.units[0];
+    u.loadBank = true;
+    u.loadBankKw = 1800;
+    run(p, 6);
+    expect(u.kw).toBe(1800);
+    expect(u.hz).toBeGreaterThan(49.5);
+    u.loadBankKw = 2100;
+    run(p, 8);
+    expect(u.alarm).toBe('kW overload');
+  });
+
+  it('base load holds one set at its setting while the others share the rest', () => {
+    const p = create();
+    for (const i of [0, 1, 2]) warm(p, i);
+    closeBreaker(p, 0);
+    for (const i of [1, 2]) {
+      p.units[i].angle = 0;
+      p.units[i].hz = p.busHz;
+      p.units[i].volts = p.busV;
+      closeBreaker(p, i);
+    }
+    for (let f = 0; f < 3; f++) setFeeder(p, f, true);
+    p.units[0].baseKw = PRIME_KW;
+    run(p, 3);
+    const load = loadKw(p);
+    expect(p.units[0].kw).toBeCloseTo(Math.min(PRIME_KW, load), 0);
+    expect(p.units[1].kw).toBeCloseTo((load - p.units[0].kw) / 2, 0);
+  });
+
+  it('each engine burns from its own day tank, refilled by the transfer pump; an empty one stops the set', () => {
+    const p = create();
+    p.timeScale = 20;
+    warm(p, 0);
+    p.units[0].loadBank = true;
+    p.units[0].loadBankKw = 1500;
+    const bulk = p.fuel;
+    run(p, 30);
+    expect(p.units[0].dayTank).toBeGreaterThan(DAY_L * 0.5);
+    expect(p.fuel).toBeLessThan(bulk);
+    p.units[0].pumpAuto = false;
+    drainDayTank(p, 0);
+    run(p, 1);
+    expect(p.units[0].alarm).toBe('Solar habis');
   });
 });

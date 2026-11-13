@@ -15,6 +15,10 @@ import {
   openBreaker,
   PRIME_KW,
   profile,
+  DAY_L,
+  drainDayTank,
+  fillDayTank,
+  LIMIT_KW as UNIT_MAX_KW,
   resetUnit,
   setEStop,
   setFeeder,
@@ -79,7 +83,7 @@ function TopBar() {
         <b>{mw(Math.max(0, cap - load))} MW</b>
       </div>
       <div>
-        <span>Solar</span>
+        <span>Tangki induk</span>
         <b>{Math.round((plant.fuel / TANK_L) * 100)}%</b>
         <small>{Math.round(rate)} L/jam</small>
       </div>
@@ -349,6 +353,64 @@ function UnitDetail() {
             {sub && <small>{sub}</small>}
           </div>
         ))}
+      </div>
+      <h2>Beban unit</h2>
+      <div className="row">
+        <button className={`small ${u.baseKw <= 0 ? 'on' : ''}`} onClick={() => (u.baseKw = 0)}>
+          Bagi rata
+        </button>
+        <button className={`small ${u.baseKw > 0 ? 'on' : ''}`} onClick={() => (u.baseKw = u.baseKw > 0 ? u.baseKw : PRIME_KW)}>
+          Base load
+        </button>
+      </div>
+      {u.baseKw > 0 && (
+        <label className="p-slider">
+          <span>
+            Setelan base load <b>{u.baseKw} kW</b> ({Math.round((u.baseKw / PRIME_KW) * 100)}%)
+          </span>
+          <input type="range" min={100} max={UNIT_MAX_KW} step={50} value={u.baseKw} onChange={(e) => (u.baseKw = +e.target.value)} />
+        </label>
+      )}
+      <p className="hint">
+        {u.baseKw > 0
+          ? 'Saat di bus, unit ini dipaksa memikul beban sebesar setelan; unit lain yang "bagi rata" menanggung sisanya dan menjaga frekuensi.'
+          : 'Saat di bus, beban dibagi rata dengan unit lain. Pilih base load untuk memaksa unit ini sampai beban penuh.'}
+      </p>
+      <label className="chk wide">
+        <input type="checkbox" checked={u.loadBank} disabled={!available(u) && !u.loadBank} onChange={() => (u.loadBank = !u.loadBank)} /> Load bank
+        <b className="p-lb">{u.loadBankKw} kW</b>
+      </label>
+      <input
+        className="p-range"
+        type="range"
+        min={0}
+        max={UNIT_MAX_KW}
+        step={50}
+        value={u.loadBankKw}
+        onChange={(e) => (u.loadBankKw = +e.target.value)}
+        aria-label="Daya load bank"
+      />
+      <p className="hint">
+        Load bank resistif dipasang di terminal genset. Breaker terbuka: genset dites sendiri tanpa mengganggu kawasan. Di atas 1980 kW (110%) selama 5 detik
+        genset trip overload.
+      </p>
+      <h2>Tangki harian</h2>
+      <div className="p-tank">
+        <em style={{ width: `${(u.dayTank / DAY_L) * 100}%`, background: u.dayTank < DAY_L * 0.1 ? '#e0533c' : undefined }} />
+        <span>
+          {Math.round(u.dayTank).toLocaleString('id')} / {DAY_L.toLocaleString('id')} L · {u.pumping ? 'pompa transfer mengisi' : u.pumpAuto ? 'pompa siaga' : 'pompa mati'}
+        </span>
+      </div>
+      <div className="row">
+        <button className={`small ${u.pumpAuto ? 'on' : ''}`} onClick={() => (u.pumpAuto = !u.pumpAuto)}>
+          Pompa {u.pumpAuto ? 'auto' : 'mati'}
+        </button>
+        <button className="small" onClick={() => drainDayTank(plant, i)}>
+          Kuras solar
+        </button>
+        <button className="small" onClick={() => fillDayTank(plant, i)} disabled={u.dayTank >= DAY_L - 1}>
+          ⛽ Isi penuh
+        </button>
       </div>
       <h2>Gangguan</h2>
       <div className="row">

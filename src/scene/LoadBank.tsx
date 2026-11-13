@@ -4,11 +4,12 @@ import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { sim } from '../store';
 import { Box, Cyl, M } from './parts';
 import { Flow } from './Site';
+import { useGenset } from './source';
 
 export function LoadBank({ at, panelAt }: { at: [number, number, number]; panelAt: [number, number, number] }) {
+  const { s: sim } = useGenset();
   const group = useRef<THREE.Group>(null);
   const fan = useRef<THREE.Group>(null);
   const glow = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2a1a12', emissive: '#ff5a1a', emissiveIntensity: 0, roughness: 0.6 }), []);

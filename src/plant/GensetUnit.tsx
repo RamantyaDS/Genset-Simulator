@@ -6,12 +6,15 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { BLOCK, Genset } from '../scene/Genset';
 import { Flows } from '../scene/Flows';
+import { LoadBank } from '../scene/LoadBank';
+import { PANEL_POS } from '../scene/ControlPanel';
 import { M } from '../scene/parts';
 import { GensetCtx, type GensetSource } from '../scene/source';
 import { useUI } from '../store';
-import { create as createGenset, TANK_L as DAY_TANK, type AlarmId } from '../sim/genset';
-import { available, busLive, TANK_L } from '../sim/plant';
+import { create as createGenset, type AlarmId } from '../sim/genset';
+import { available, bankKw, busLive } from '../sim/plant';
 import { inspectUnit } from './camera';
+import { DayTank } from './DayTank';
 import { plant, usePlant } from './store';
 
 const ASSEMBLED = { explode: 0 as const, xray: false };
@@ -70,7 +73,10 @@ export function GensetUnit({ index }: { index: number }) {
     s.starter = u.phase === 'crank';
     s.firing = s.fuelOn = u.rpm > 300 && u.phase !== 'stopping';
     s.volts = u.volts;
-    s.genKw = s.demandKw = u.kw;
+    s.genKw = u.kw;
+    s.demandKw = u.kw - bankKw(u); // what goes to the bus; the rest heats the load bank
+    s.loadBankOn = u.loadBank;
+    s.loadBankKw = u.loadBankKw;
     s.kwh = u.kwh;
     s.eStop = u.eStop;
     s.faultRadiator = u.faultRadiator;
@@ -88,7 +94,7 @@ export function GensetUnit({ index }: { index: number }) {
     s.sinceStart = u.phase === 'running' ? s.sinceStart + dt : 0;
     s.warm = available(u) ? s.warm + dt : 0;
     if (u.breaker) s.sinceStart = s.warm = 999;
-    s.fuel = (plant.fuel / TANK_L) * DAY_TANK;
+    s.fuel = u.dayTank;
     s.oil = u.oil;
     s.events.length = 0;
     const id = u.alarm ? ALARM_ID[u.alarm] : undefined;
@@ -109,6 +115,8 @@ export function GensetUnit({ index }: { index: number }) {
       <group ref={group}>
         <Genset />
         <Flows />
+        <DayTank index={index} />
+        <LoadBank at={[PANEL_POS[0] + 2.6, 0, 2.6]} panelAt={PANEL_POS} />
         <mesh position={[2.72, 2.24, 0.62]}>
           <sphereGeometry args={[0.06, 12, 12]} />
           <meshStandardMaterial ref={lamp} color="#2a2d30" />

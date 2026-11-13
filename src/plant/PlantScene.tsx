@@ -4,7 +4,7 @@
 // - yard with step-up transformers, the 20 kV switchgear, bulk fuel tanks and the tanker when it is called
 // - the complex: palm oil mill with its boiler stack and sterilisers, kernel plant, housing with school, mosque and
 //   clinic, office/workshop, water tower; windows and street lights follow their feeder and the time of day
-import { CameraControls, Line, Sky, Text } from '@react-three/drei';
+import { CameraControls, Line, Text } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import { useEffect, useMemo, useRef } from 'react';
@@ -13,7 +13,7 @@ import { FocusHighlight } from '../scene/FocusHighlight';
 import { HeatHaze, type HazeSources } from '../scene/HeatHaze';
 import { Box, Cyl, M } from '../scene/parts';
 import { useUI } from '../store';
-import { busLive, hourOf, PRIME_KW } from '../sim/plant';
+import { busLive, PRIME_KW } from '../sim/plant';
 import { playPlantEvent, soundSource, updateSound } from '../sound';
 import { GensetUnit, unitState } from './GensetUnit';
 import { cams, goPlant, unitWorld } from './camera';
@@ -35,7 +35,9 @@ function UnitHaze() {
 }
 
 /** 0 at night, 1 at noon: drives the sun, sky and whether windows/street lights matter. */
-const daylight = () => Math.max(0, Math.sin(((hourOf(plant) - 6) / 12) * Math.PI));
+// The scene stays at night so the hall, the windows and the street lights read clearly; the clock and the load
+// profile still run through the whole day.
+const daylight = () => 0;
 
 function Driver() {
   const camera = useThree((s) => s.camera);
@@ -69,29 +71,22 @@ function Driver() {
 }
 
 function DayNight() {
-  const sky = useRef<THREE.Mesh>(null);
   const sun = useRef<THREE.DirectionalLight>(null);
   const hemi = useRef<THREE.HemisphereLight>(null);
   const scene = useThree((s) => s.scene);
   const bg = useMemo(() => new THREE.Color(), []);
   useFrame(() => {
-    const h = hourOf(plant);
-    const a = ((h - 6) / 12) * Math.PI;
     const d = daylight();
-    const pos = new THREE.Vector3(Math.cos(a) * 100, Math.sin(a) * 100, 40);
-    const mat = sky.current?.material as THREE.ShaderMaterial | undefined;
-    mat?.uniforms.sunPosition.value.copy(pos);
-    sun.current!.position.copy(pos);
-    sun.current!.intensity = 2.4 * d;
-    hemi.current!.intensity = 0.12 + 0.75 * d;
+    // moonlight: a faint cool key light from high up
+    sun.current!.position.set(-60, 90, 50);
+    sun.current!.intensity = 0.35;
+    hemi.current!.intensity = 0.2;
     bg.set('#0b1220').lerp(new THREE.Color('#bcd4e6'), d);
     (scene.fog as THREE.Fog).color.copy(bg);
-    if (sky.current) sky.current.visible = d > 0.02;
     scene.background = bg;
   });
   return (
     <>
-      <Sky ref={sky as never} sunPosition={[100, 40, 40]} turbidity={7} rayleigh={1.4} />
       <directionalLight
         ref={sun}
         castShadow
@@ -101,7 +96,7 @@ function DayNight() {
         shadow-camera-top={60}
         shadow-camera-bottom={-60}
         shadow-camera-far={300}
-        color="#fff1d6"
+        color="#9fb4e0"
       />
       <hemisphereLight ref={hemi} args={['#d6e6ff', '#3d4a2a', 0.8]} />
     </>
