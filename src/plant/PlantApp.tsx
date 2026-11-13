@@ -52,7 +52,7 @@ import { amps, fuelRate, hz as setHz } from '../sim/genset';
 import { DsePanel } from '../ui/DsePanel';
 import { PartCard } from '../ui/PartCard';
 import { unitState } from './GensetUnit';
-import { goPlant, goUnit, inspectUnit, leaveInspect, type UnitView } from './camera';
+import { goPlant, goSeat, goUnit, inspectUnit, leaveInspect, type UnitView } from './camera';
 import { PlantScene } from './PlantScene';
 import { plant, usePlant, type PlantCam } from './store';
 
@@ -907,6 +907,7 @@ let introSeen = false;
 
 export function PlantApp() {
   const inspect = usePlant((s) => s.inspect);
+  const cam = usePlant((s) => s.cam);
   const [intro, setIntro] = useState(!introSeen);
   useEffect(() => {
     document.body.classList.add('plant-mode');
@@ -969,8 +970,26 @@ export function PlantApp() {
         </div>
       )}
       <div className="p-cams">
+        {cam === 'control' && (
+          <div className="p-seats">
+            <span>🪑 Duduk di</span>
+            {['G1', 'G2', 'G3', 'G4', 'G5', 'Bus'].map((l, k) => (
+              <button key={l} className="small" onClick={() => goSeat(k)} title={k < 5 ? `Kursi operator konsol genset ${l}` : 'Kursi operator konsol bus dan penyulang'}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
         {CAMS.map(([c, l]) => (
-          <button key={c} className="small" onClick={() => (leaveInspect(), goPlant(c))}>
+          <button
+            key={c}
+            className={`small ${cam === c ? 'on' : ''}`}
+            onClick={() => {
+              leaveInspect();
+              goPlant(c);
+              usePlant.getState().set({ cam: c });
+            }}
+          >
             {l}
           </button>
         ))}

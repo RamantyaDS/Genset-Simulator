@@ -321,10 +321,6 @@ function ControlRoom() {
         <planeGeometry args={[4.4, 2.2]} />
         <meshBasicMaterial ref={screen} map={tex.t} toneMapped={false} />
       </mesh>
-      {/* operator desk facing the SCADA screen, out of the way of the switchboard */}
-      <Box s={[3, 0.8, 1.2]} m={M.alt} position={[-0.6, 0.4, -4.2]} />
-      <Box s={[0.6, 0.4, 0.05]} m={M.black} position={[-1.2, 1.05, -4.5]} />
-      <Box s={[0.6, 0.4, 0.05]} m={M.black} position={[0, 1.05, -4.5]} />
       <pointLight ref={light} position={[0, 3.5, 0]} intensity={20} distance={12} color="#eef4ff" />
       <Text position={[0, 4.5, 6.25]} fontSize={0.45} color="#1d3a5c">
         RUANG KONTROL
@@ -476,6 +472,7 @@ function Complex() {
       <Text position={[-40, 6, 232.2]} fontSize={1} color="#c3141c">
         KLINIK
       </Text>
+      <ClinicUps />
       {/* offices and workshop near the plant road; water tower */}
       <Building pos={[45, 0, 60]} size={[20, 7, 10]} color="#cfd8de" win={office} />
       <Text position={[45, 8, 65.2]} fontSize={1.1} color="#2b2b2b">
@@ -497,6 +494,29 @@ function Complex() {
           </mesh>
         </group>
       ))}
+    </group>
+  );
+}
+
+/** Small UPS cabinet against the clinic wall; its lamp shows online (green) or on battery (amber). */
+function ClinicUps() {
+  const lamp = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame(() => {
+    const u = plant.ups[1];
+    const c = u.charge === 0 ? '#3a1010' : u.onBattery ? (Math.floor(performance.now() / 400) % 2 ? '#ffb020' : '#553300') : '#39d353';
+    lamp.current!.color.set(c);
+    lamp.current!.emissive.set(c);
+  });
+  return (
+    <group position={[-32.4, 0, 228]}>
+      <Box s={[0.7, 1.6, 0.7]} r={0.02} m={M.white} position={[0, 0.8, 0]} />
+      <mesh position={[0.36, 1.35, 0]}>
+        <boxGeometry args={[0.02, 0.12, 0.12]} />
+        <meshStandardMaterial ref={lamp} color="#39d353" emissive="#39d353" emissiveIntensity={2} />
+      </mesh>
+      <Text position={[0.37, 1.1, 0]} rotation={[0, Math.PI / 2, 0]} fontSize={0.1} color="#1d3a5c">
+        UPS KLINIK
+      </Text>
     </group>
   );
 }
