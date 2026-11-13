@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { busLive, closeBreaker, create, DAY_L, startScenario, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
+import { busLive, busLoadKw, closeBreaker, create, DAY_L, startScenario, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
 
 const run = (p: Plant, s: number, dt = 0.02) => {
   for (let t = 0; t < s; t += dt) step(p, dt);
@@ -135,7 +135,7 @@ describe('testing one set like the single set', () => {
     for (let f = 0; f < 3; f++) setFeeder(p, f, true);
     p.units[0].baseKw = PRIME_KW;
     run(p, 3);
-    const load = loadKw(p);
+    const load = busLoadKw(p); // includes any random motor start surge
     expect(p.units[0].kw).toBeCloseTo(Math.min(PRIME_KW, load), 0);
     expect(p.units[1].kw).toBeCloseTo((load - p.units[0].kw) / 2, 0);
   });
