@@ -27,9 +27,9 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 - Suhu air pendingin naik perlahan seperti aslinya (pemanas menjaga 45 °C saat siaga, thermostat 80–90 °C saat jalan). Waktu bisa dipercepat 10× atau 30×
 - Gangguan: emergency stop, solar habis (gagal start setelah 3 kali percobaan), overload trip, radiator tersumbat, oli bocor, dengan level proteksi pabrik DSE (suhu: peringatan 90 °C, shutdown 96 °C; oli: peringatan 1,24 bar, shutdown 1,03 bar)
 - X-ray: aliran solar, udara turbo, gas buang, air pendingin, dan listrik
-- Mode bongkar untuk memisahkan radiator, mesin, alternator, dan panel
-- Suara disintesis langsung di browser: pembakaran V16 (200 Hz pada 1500 rpm), motor starter, turbo, kipas, klak breaker, dan buzzer alarm. Suara lebih redam di dalam kanopi silent
-- Asap knalpot: kepulan gelap saat mesin menyala dan saat beban naik
+- Bongkar dua level: rakitan utama, lalu setiap komponen (16 kepala silinder, tutup rocker, manifold, 4 turbo, charge air cooler, bak oli, gear case, pompa air, filter, starter, rotor dan stator alternator, exciter, kotak terminal). Blok mesin menjadi transparan sehingga poros engkol dan 16 piston terlihat bergerak, lengkap dengan kilatan langkah usaha. Klik komponen mana saja untuk melihat nama dan fungsinya
+- Suara mesin disintesis per silinder dengan AudioWorklet: 16 ledakan tiap dua putaran (200 per detik pada 1500 rpm), masing-masing berisi dentuman knalpot, bunyi pembakaran, dan ketukan diesel. Ada juga starter yang tersendat tiap langkah kompresi, mesin yang tersendat saat mulai hidup, suara makin berat saat dibebani, ketukan lebih keras saat mesin dingin, turbo, kipas, gema lingkungan, klak breaker, dan buzzer alarm. Suara lebih redam di dalam kanopi silent
+- Asap knalpot seperti diesel asli: uap putih saat starter, kepulan hitam saat mesin menyala, kabut putih kebiruan saat mesin masih dingin, jelaga hitam saat beban naik mendadak (turbo lag), hampir bening saat jalan normal, dan abu-abu gelap saat overload
 - Narasi bahasa Indonesia yang menjelaskan apa yang sedang terjadi di setiap tahap
 
 ## Catatan akurasi

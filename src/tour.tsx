@@ -10,7 +10,7 @@ export interface Chapter {
   view: View;
   part?: string;
   xray?: boolean;
-  explode?: boolean;
+  explode?: 0 | 1 | 2;
   silent?: boolean;
   dse?: boolean; // show the DSE panel beside the tour
   body: () => ReactNode;
@@ -69,8 +69,9 @@ export const CHAPTERS: Chapter[] = [
   },
   {
     title: 'Mesin diesel 16 silinder',
-    view: { pos: [-0.6, 4.4, 3.6], target: [-0.5, 1.6, 0] },
+    view: { pos: [-0.2, 5.2, 5.4], target: [-0.5, 2.0, 0] },
     part: 'engine',
+    explode: 2,
     body: () => (
       <>
         <p>
@@ -94,6 +95,10 @@ export const CHAPTERS: Chapter[] = [
             <b>Buang</b>: gas sisa pembakaran dikeluarkan.
           </li>
         </ol>
+        <p>
+          Mesinnya sedang dibongkar: blok dibuat transparan supaya terlihat <b>poros engkol</b> dan <b>16 piston</b>. Kilatan oranye di kepala piston adalah
+          silinder yang sedang langkah usaha. Gerakannya diperlambat, karena aslinya 25 putaran per detik. Klik komponen mana saja untuk melihat namanya.
+        </p>
         <p>
           Mesin genset selalu berputar di <b>1500 rpm</b>, tidak naik turun seperti mesin mobil. Alasannya dijelaskan di bab alternator.
         </p>
@@ -175,8 +180,8 @@ export const CHAPTERS: Chapter[] = [
   },
   {
     title: 'Alternator',
-    view: { pos: [4.6, 2.6, 3.4], target: [1.7, 1.3, 0] },
-    part: 'alternator',
+    view: { pos: [6.6, 3.4, 6.4], target: [3.6, 1.2, 0] },
+    explode: 2,
     body: () => (
       <>
         <p>
@@ -192,6 +197,10 @@ export const CHAPTERS: Chapter[] = [
           bebannya. Arusnya sangat besar: sekitar 3.250 ampere per fasa pada beban penuh.
         </p>
         <p>Efisiensinya sekitar 96%, jadi hampir semua putaran menjadi listrik.</p>
+        <p>
+          Di layar, stator (rumah dengan kumparan tembaga) sudah ditarik lepas, jadi rotor dengan 4 kutub magnetnya terlihat. Klik rotor atau stator untuk
+          keterangannya.
+        </p>
       </>
     ),
   },
@@ -494,14 +503,14 @@ export const CHAPTERS: Chapter[] = [
   },
 ];
 
-let saved: { view: 'open' | 'silent'; xray: boolean; explode: boolean; panelOpen: boolean } | null = null;
+let saved: { view: 'open' | 'silent'; xray: boolean; explode: 0 | 1 | 2; panelOpen: boolean } | null = null;
 
 const fitInset = (dse: boolean) => (innerWidth > 900 ? setInset(432, dse ? 472 : 0, 0) : setInset(0, 0, innerHeight * 0.5));
 
 export function openChapter(i: number) {
   const c = CHAPTERS[i];
   const narrow = innerWidth <= 900;
-  set({ tour: i, view: c.silent ? 'silent' : 'open', xray: !!c.xray, explode: !!c.explode, panelOpen: !!c.dse && !narrow });
+  set({ tour: i, view: c.silent ? 'silent' : 'open', xray: !!c.xray, explode: c.explode ?? 0, focus: null, panelOpen: !!c.dse && !narrow });
   fitInset(!!c.dse && !narrow);
   setTimeout(() => goToView(c.view), 30);
 }

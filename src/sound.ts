@@ -1,5 +1,7 @@
-// Synthesized genset sound, driven by the simulation every frame. No samples: a V16 four-stroke fires 8 times per
-// crank revolution, so at 1500 rpm the combustion note is 200 Hz; while cranking at ~150 rpm the pulses are 20 Hz and heard one by one.
+// Genset sound, driven by the simulation every frame. The engine itself is the AudioWorklet in engineWorklet.ts
+// (cylinder-by-cylinder combustion and the starter); here it gets exhaust EQ, turbo whine, fan rush, a little outdoor
+// reverb, and distance / canopy muffling. Controller beeps, breaker clunks and the alarm buzzer are one-shots.
+import { ENGINE_WORKLET } from './engineWorklet';
 import { loadFrac, type SimEvent } from './sim/genset';
 import { sim } from './store';
 import { ui } from './dse';
@@ -7,105 +9,77 @@ import { ui } from './dse';
 let ctx: AudioContext | null = null;
 let master: GainNode;
 let muffle: BiquadFilterNode;
-let n: ReturnType<typeof build> | null = null;
 let enabled = true;
+let n: ReturnType<typeof build> | null = null;
+let engine: AudioWorkletNode | null = null;
 
-function noiseBuffer(c: AudioContext) {
-  const b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+function noiseBuffer(c: AudioContext, seconds = 2) {
+  const b = c.createBuffer(1, c.sampleRate * seconds, c.sampleRate);
   const d = b.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   return b;
 }
 
+/** Short decaying-noise impulse: the slap of a yard and nearby walls. */
+function impulse(c: AudioContext) {
+  const len = Math.floor(c.sampleRate * 1.4);
+  const b = c.createBuffer(2, len, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = b.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.5);
+  }
+  return b;
+}
+
 function build(c: AudioContext) {
-  const noise = noiseBuffer(c);
-  const src = () => {
-    const s = c.createBufferSource();
-    s.buffer = noise;
-    s.loop = true;
-    s.start();
-    return s;
-  };
-  const engine = c.createGain();
-  engine.gain.value = 0;
-  engine.connect(muffle);
+  // Engine bus: exhaust tone shaping, then distance/canopy muffling, plus a reverb send.
+  const bus = c.createGain();
+  bus.gain.value = 0;
+  const lowShelf = c.createBiquadFilter();
+  lowShelf.type = 'lowshelf';
+  lowShelf.frequency.value = 110;
+  lowShelf.gain.value = 8;
+  const body = c.createBiquadFilter();
+  body.type = 'peaking';
+  body.frequency.value = 180;
+  body.Q.value = 0.9;
+  body.gain.value = 3;
+  const top = c.createBiquadFilter();
+  top.type = 'lowpass';
+  top.frequency.value = 6500;
+  // Keep the sub-bass out of the mud range small speakers can't play anyway.
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 38;
+  bus.connect(hp).connect(lowShelf).connect(body).connect(top).connect(muffle);
+  const verb = c.createConvolver();
+  verb.buffer = impulse(c);
+  const wet = c.createGain();
+  wet.gain.value = 0.22;
+  top.connect(verb).connect(wet).connect(master);
 
-  // Combustion: sawtooth at firing frequency through a load-dependent lowpass.
-  const fire = c.createOscillator();
-  fire.type = 'sawtooth';
-  const fireLp = c.createBiquadFilter();
-  fireLp.type = 'lowpass';
-  fireLp.Q.value = 2;
-  const fireG = c.createGain();
-  fire.connect(fireLp).connect(fireG).connect(engine);
-  fire.start();
-
-  // Half-order rumble and first-order shake.
-  const sub = c.createOscillator();
-  sub.type = 'triangle';
-  const subG = c.createGain();
-  sub.connect(subG).connect(engine);
-  sub.start();
-
-  // Mechanical clatter: band-passed noise chopped at the firing rate so each power stroke is audible at low speed.
-  const clat = src();
-  const clatBp = c.createBiquadFilter();
-  clatBp.type = 'bandpass';
-  clatBp.frequency.value = 1400;
-  clatBp.Q.value = 0.7;
-  const chop = c.createGain();
-  const chopOsc = c.createOscillator();
-  chopOsc.type = 'square';
-  const chopDepth = c.createGain();
-  chopDepth.gain.value = 0.5;
-  chopOsc.connect(chopDepth).connect(chop.gain);
-  chop.gain.value = 0.5;
-  chopOsc.start();
-  const clatG = c.createGain();
-  clat.connect(clatBp).connect(chop).connect(clatG).connect(engine);
-
-  // Exhaust thump: low-passed noise also chopped at the firing rate.
-  const thump = src();
-  const thumpLp = c.createBiquadFilter();
-  thumpLp.type = 'lowpass';
-  thumpLp.frequency.value = 180;
-  const thumpChop = c.createGain();
-  chopDepth.connect(thumpChop.gain);
-  thumpChop.gain.value = 0.5;
-  const thumpG = c.createGain();
-  thump.connect(thumpLp).connect(thumpChop).connect(thumpG).connect(engine);
-
-  // Turbo whine climbs with load; radiator fan whoosh grows with speed.
+  // Turbo whine climbs with load; radiator fan rush grows with speed.
   const turbo = c.createOscillator();
   turbo.type = 'sine';
+  const turbo2 = c.createOscillator();
+  turbo2.type = 'sine';
   const turboG = c.createGain();
-  turbo.connect(turboG).connect(engine);
+  turboG.gain.value = 0;
+  turbo.connect(turboG);
+  turbo2.connect(turboG);
+  turboG.connect(bus);
   turbo.start();
-  const fan = src();
+  turbo2.start();
+  const fan = c.createBufferSource();
+  fan.buffer = noiseBuffer(c);
+  fan.loop = true;
   const fanLp = c.createBiquadFilter();
   fanLp.type = 'lowpass';
-  fanLp.frequency.value = 700;
+  fanLp.frequency.value = 600;
   const fanG = c.createGain();
-  fan.connect(fanLp).connect(fanG).connect(engine);
-
-  // Starter motor: geared whine plus brushes, loaded down on every compression stroke.
-  const st = c.createOscillator();
-  st.type = 'sawtooth';
-  st.frequency.value = 340;
-  const stBp = c.createBiquadFilter();
-  stBp.type = 'bandpass';
-  stBp.frequency.value = 900;
-  stBp.Q.value = 1.2;
-  const stNoise = src();
-  const stNoiseBp = c.createBiquadFilter();
-  stNoiseBp.type = 'bandpass';
-  stNoiseBp.frequency.value = 3000;
-  const stG = c.createGain();
-  stG.gain.value = 0;
-  st.connect(stBp).connect(stG);
-  stNoise.connect(stNoiseBp).connect(stG);
-  stG.connect(muffle);
-  st.start();
+  fanG.gain.value = 0;
+  fan.connect(fanLp).connect(fanG).connect(bus);
+  fan.start();
 
   // Controller buzzer.
   const buzz = c.createOscillator();
@@ -116,27 +90,33 @@ function build(c: AudioContext) {
   buzz.connect(buzzG).connect(master);
   buzz.start();
 
-  return { engine, fire, fireLp, fireG, sub, subG, chopOsc, clatG, thumpG, turbo, turboG, fanG, st, stG, buzzG };
+  return { bus, turbo, turbo2, turboG, fanG, buzzG };
 }
 
 /** Must be called from a user gesture (browsers block audio until then). */
-export function initSound() {
+export async function initSound() {
   if (ctx) return ctx.resume();
   ctx = new AudioContext();
   master = ctx.createGain();
-  master.gain.value = enabled ? 0.8 : 0;
+  master.gain.value = enabled ? 0.9 : 0;
   muffle = ctx.createBiquadFilter();
   muffle.type = 'lowpass';
   muffle.frequency.value = 16000;
   const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -14;
+  comp.ratio.value = 4;
   muffle.connect(master);
   master.connect(comp).connect(ctx.destination);
   n = build(ctx);
+  const url = URL.createObjectURL(new Blob([ENGINE_WORKLET], { type: 'application/javascript' }));
+  await ctx.audioWorklet.addModule(url);
+  engine = new AudioWorkletNode(ctx, 'diesel-engine', { outputChannelCount: [1] });
+  engine.connect(n.bus);
 }
 
 export function setSound(on: boolean) {
   enabled = on;
-  if (ctx) master.gain.setTargetAtTime(on ? 0.8 : 0, ctx.currentTime, 0.05);
+  if (ctx) master.gain.setTargetAtTime(on ? 0.9 : 0, ctx.currentTime, 0.05);
 }
 
 /** Per-frame update. `distance` is camera-to-genset in metres; `enclosed` when the silent canopy is closed. */
@@ -144,38 +124,35 @@ export function updateSound(distance: number, enclosed: boolean) {
   if (!ctx || !n) return;
   const t = ctx.currentTime;
   const r = sim.rpm;
-  const lf = sim.firing ? Math.min(1.15, loadFrac(sim)) : 0;
-  const fFire = Math.max(1, (r / 60) * 8);
+  const lf = sim.firing ? Math.min(1.25, loadFrac(sim)) : 0;
   const k = (v: AudioParam, x: number, tc = 0.03) => v.setTargetAtTime(x, t, tc);
 
-  const near = Math.min(1, 7 / Math.max(3, distance));
-  k(muffle.frequency, enclosed ? 700 : 16000, 0.2);
-  const level = near * (enclosed ? 0.45 : 1);
+  // Closer is louder; the canopy's insulation takes most of the highs and some level.
+  const near = Math.min(1, 8 / Math.max(3, distance));
+  k(muffle.frequency, enclosed ? 650 : 16000, 0.2);
+  k(n.bus.gain, near * (enclosed ? 0.5 : 1), 0.1);
+
+  if (engine) {
+    const p = engine.parameters;
+    k(p.get('rpm')!, r, 0.02);
+    k(p.get('load')!, lf, 0.25);
+    p.get('firing')!.setValueAtTime(sim.firing ? 1 : 0, t);
+    p.get('starter')!.setValueAtTime(sim.starter ? 1 : 0, t);
+    k(p.get('cold')!, Math.max(0, Math.min(1, (70 - sim.coolant) / 30)), 1);
+  }
 
   const spin = Math.min(1, r / 1500);
-  const firing = sim.firing ? 1 : 0;
-  k(n.engine.gain, level);
-  k(n.fire.frequency, fFire);
-  k(n.fireLp.frequency, 160 + 500 * spin + 900 * lf);
-  k(n.fireG.gain, firing * (0.05 + 0.05 * spin + 0.08 * lf));
-  k(n.sub.frequency, fFire / 2);
-  k(n.subG.gain, (r > 20 ? 0.04 : 0) + firing * (0.1 + 0.08 * lf));
-  k(n.chopOsc.frequency, fFire);
-  k(n.clatG.gain, r > 20 ? 0.03 + 0.08 * spin * (sim.firing ? 1 : 0.4) : 0);
-  k(n.thumpG.gain, r > 20 ? (sim.firing ? 0.35 + 0.35 * lf : 0.12) : 0);
-  k(n.turbo.frequency, 1500 + 4200 * spin * (0.35 + 0.65 * Math.min(1, lf)));
-  k(n.turboG.gain, firing * spin * (0.003 + 0.012 * lf), 0.4);
-  k(n.fanG.gain, 0.12 * spin * spin);
-
-  const cranking = sim.starter ? 1 : 0;
-  k(n.st.frequency, 280 + r * 0.6);
-  k(n.stG.gain, cranking * 0.05, 0.02);
+  const boost = spin * (0.3 + 0.7 * Math.min(1, lf));
+  k(n.turbo.frequency, 1800 + 5200 * boost, 0.6);
+  k(n.turbo2.frequency, 2700 + 7400 * boost, 0.6);
+  k(n.turboG.gain, (sim.firing ? 1 : 0) * spin * (0.002 + 0.01 * lf), 0.5);
+  k(n.fanG.gain, 0.22 * spin * spin, 0.3);
 
   const buzzing = ui.buzzer && sim.alarms.length > 0;
   n.buzzG.gain.setTargetAtTime(buzzing && Math.floor(t * 2) % 2 === 0 ? 0.03 : 0, t, 0.005);
 }
 
-function oneShot(kind: 'beep' | 'clunk' | 'engage') {
+function oneShot(kind: 'beep' | 'clunk' | 'engage' | 'release') {
   if (!ctx) return;
   const c = ctx;
   const t = c.currentTime;
@@ -190,23 +167,24 @@ function oneShot(kind: 'beep' | 'clunk' | 'engage') {
     o.stop(t + 0.08);
     return;
   }
-  // Breaker or starter pinion: a short metallic burst on top of a low thud.
+  // Breaker, starter pinion engaging or flying out: a metallic burst on top of a low thud.
   const b = c.createBufferSource();
-  b.buffer = noiseBuffer(c);
-  const lp = c.createBiquadFilter();
-  lp.type = 'bandpass';
-  lp.frequency.value = kind === 'clunk' ? 1800 : 2600;
+  b.buffer = noiseBuffer(c, 0.3);
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = kind === 'clunk' ? 1700 : kind === 'engage' ? 2600 : 3400;
   const g = c.createGain();
-  g.gain.setValueAtTime(kind === 'clunk' ? 0.5 : 0.3, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === 'clunk' ? 0.12 : 0.08));
-  b.connect(lp).connect(g).connect(master);
+  const peak = kind === 'clunk' ? 0.6 : 0.35;
+  g.gain.setValueAtTime(peak, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === 'clunk' ? 0.14 : 0.07));
+  b.connect(bp).connect(g).connect(master);
   b.start(t);
-  b.stop(t + 0.2);
+  b.stop(t + 0.25);
   const o = c.createOscillator();
-  o.frequency.setValueAtTime(kind === 'clunk' ? 110 : 160, t);
+  o.frequency.setValueAtTime(kind === 'clunk' ? 110 : 170, t);
   o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
   const og = c.createGain();
-  og.gain.setValueAtTime(0.5, t);
+  og.gain.setValueAtTime(kind === 'release' ? 0.15 : 0.55, t);
   og.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
   o.connect(og).connect(master);
   o.start(t);
@@ -217,4 +195,5 @@ export function playEvent(e: SimEvent) {
   if (e === 'beep') oneShot('beep');
   else if (e === 'gcbClose' || e === 'gcbOpen' || e === 'mcbClose' || e === 'mcbOpen') oneShot('clunk');
   else if (e === 'starterOn') oneShot('engage');
+  else if (e === 'starterOff') oneShot('release');
 }

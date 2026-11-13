@@ -444,3 +444,38 @@ button:focus-visible {
     height: 50vh;
   }
 }
+
+.part-card {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(380px, calc(100% - 32px));
+  background: var(--bg);
+  border: 1px solid #5fe3ff66;
+  border-radius: 12px;
+  padding: 10px 14px 12px;
+  backdrop-filter: blur(6px);
+}
+.part-card > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.part-card .x {
+  padding: 0 8px;
+  font-size: 18px;
+}
+.part-card p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+}
+@media (max-width: 900px) {
+  .part-card {
+    bottom: auto;
+    top: 200px;
+  }
+}

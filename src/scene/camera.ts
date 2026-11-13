@@ -16,6 +16,7 @@ export const PRESETS = {
   radiator: { pos: [-6, 2.6, 3.2], target: [-2.4, 1.4, 0] },
   site: { pos: [16, 10, 16], target: [2, 2, -6] },
   silent: { pos: [11, 6, 12], target: [0, 1.5, 0] },
+  exploded: { pos: [7.5, 6.2, 10.5], target: [0.7, 1.9, 0.3] },
 } as const;
 
 export type Preset = keyof typeof PRESETS;

@@ -10,7 +10,7 @@ interface UI {
   tick: number;
   view: View;
   xray: boolean;
-  explode: boolean;
+  explode: 0 | 1 | 2; // 0 assembled, 1 main assemblies apart, 2 every part apart
   speed: number;
   panelOpen: boolean;
   focus: string | null; // part the info card describes
@@ -23,7 +23,7 @@ export const useUI = createStore<UI>((setState) => ({
   tick: 0,
   view: 'open',
   xray: false,
-  explode: false,
+  explode: 0,
   speed: 1,
   panelOpen: true,
   focus: null,

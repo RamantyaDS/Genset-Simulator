@@ -9,6 +9,7 @@ import { controls, goTo } from './camera';
 import { Canopy, CANOPY, SILENT_STACK } from './Canopy';
 import { PANEL_POS } from './ControlPanel';
 import { Flows } from './Flows';
+import { FocusHighlight } from './FocusHighlight';
 import { Genset } from './Genset';
 import { LoadBank } from './LoadBank';
 import { Site } from './Site';
@@ -54,7 +55,7 @@ export function Experience() {
   const shift: [number, number, number] = silent ? [SILENT_SHIFT, CANOPY.base, 0] : [0, 0, 0];
   const panelWorld: [number, number, number] = [PANEL_POS[0] + shift[0], PANEL_POS[1] + shift[1], PANEL_POS[2]];
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
+    <Canvas shadows dpr={[1, 2]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
       <color attach="background" args={['#1b2532']} />
       <fog attach="fog" args={['#1b2532', 30, 90]} />
       <hemisphereLight args={['#9fb6d6', '#2a2620', 0.5]} />
@@ -85,6 +86,7 @@ export function Experience() {
       </group>
       {silent && <Canopy />}
       <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
+      <FocusHighlight />
       <Smoke key={view} at={silent ? SILENT_STACK : [0.74, 2.62, 0]} />
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={45} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />

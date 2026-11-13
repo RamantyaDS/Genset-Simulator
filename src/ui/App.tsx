@@ -8,6 +8,7 @@ import { initSound, setSound } from '../sound';
 import { sim, useUI } from '../store';
 import { DsePanel } from './DsePanel';
 import { Tour } from './Tour';
+import { PartCard } from './PartCard';
 import { startTour } from '../tour';
 
 function Gauges() {
@@ -158,7 +159,7 @@ function Controls() {
         <button
           className={ui.view === 'silent' ? 'on' : ''}
           onClick={() => {
-            ui.set({ view: 'silent', explode: false });
+            ui.set({ view: 'silent', explode: 0, focus: null });
             goTo('silent');
           }}
         >
@@ -169,8 +170,16 @@ function Controls() {
         <button className={ui.xray ? 'on' : ''} onClick={() => ui.set({ xray: !ui.xray })}>
           X-ray aliran
         </button>
-        <button className={ui.explode ? 'on' : ''} disabled={ui.view === 'silent'} onClick={() => ui.set({ explode: !ui.explode })}>
-          Bongkar
+        <button
+          className={ui.explode ? 'on' : ''}
+          disabled={ui.view === 'silent'}
+          onClick={() => {
+            const next = ui.explode === 0 ? 1 : ui.explode === 1 ? 2 : 0;
+            ui.set({ explode: next, focus: null });
+            goTo(next ? 'exploded' : 'genset');
+          }}
+        >
+          {ui.explode === 0 ? 'Bongkar' : ui.explode === 1 ? 'Bongkar detail' : 'Rakit lagi'}
         </button>
       </div>
       <div className="row wrap">
@@ -246,6 +255,7 @@ export function App() {
       <Gauges />
       {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
       {panelOpen && !(narrow && tour !== null) && <DsePanel />}
+      <PartCard />
       {!started && (
         <div className="intro">
           <div>
