@@ -102,6 +102,7 @@ export interface State {
   demandKw: number; // what the building wants
   genKw: number;
   coolant: number; // °C
+  exhaust: number; // °C at the turbine inlet
   oil: number; // bar
   battery: number; // V
   fuel: number; // litres
@@ -142,6 +143,7 @@ export function create(): State {
     demandKw: 1200,
     genKw: 0,
     coolant: 45, // jacket water heater keeps a standby engine warm
+    exhaust: 30,
     oil: 0,
     battery: 25.6,
     fuel: TANK_L * 0.9,
@@ -476,6 +478,10 @@ export function step(s: State, dt: number) {
   const coolTarget = s.firing ? (s.faultRadiator ? 112 : 79 + 10 * lf) : 45;
   const coolTau = s.firing ? (s.coolant < 75 && !s.faultRadiator ? 240 : 90) : 900;
   s.coolant += (coolTarget - s.coolant) * Math.min(1, dt / coolTau);
+  // Exhaust gas before the turbines: ~150 °C idling, roughly 550–600 °C at prime power, higher in overload.
+  // The turbine housings follow it with the lag of a heavy iron casting.
+  const exTarget = s.firing ? 150 + 420 * lf + 260 * Math.max(0, lf - 1) : 30;
+  s.exhaust += (exTarget - s.exhaust) * Math.min(1, dt / (exTarget > s.exhaust ? 20 : 70));
   const oilNorm = s.rpm > 600 ? 4.6 - 0.02 * (s.coolant - 75) : s.rpm > 50 ? 0.4 + 0.004 * s.rpm : 0;
   const oilTarget = s.faultOil && s.rpm > 50 ? oilNorm * 0.18 : oilNorm;
   s.oil += (oilTarget - s.oil) * Math.min(1, dt / (s.faultOil ? 6 : 0.8));

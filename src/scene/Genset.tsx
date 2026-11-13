@@ -69,6 +69,18 @@ function GhostBlock() {
   return null;
 }
 
+// Bare cast iron glows once hot enough to see in the dark: dull red from ~480 °C, orange-red toward 700 °C.
+const DULL = new THREE.Color('#5a0800');
+const BRIGHT = new THREE.Color('#e8360c');
+function HotMetal() {
+  useFrame(() => {
+    const x = Math.max(0, Math.min(1, (sim.exhaust - 480) / 240));
+    M.hot.emissive.copy(DULL).lerp(BRIGHT, x);
+    M.hot.emissiveIntensity = x > 0 ? 0.35 + Math.pow(x, 1.6) * 2.4 : 0;
+  });
+  return null;
+}
+
 // Shared shaft angle for crank, pistons, rotor. Shown in slow motion: 1500 rpm is 157 rad/s, far past what a frame can show.
 const shaft = { angle: 0 };
 function ShaftClock() {
@@ -188,6 +200,9 @@ function Radiator() {
       </mesh>
       <Box s={[0.36, 1.95, 2.0]} m={M.black} position={[-2.66, 1.42, 0]} />
       <Box s={[0.38, 0.04, 2.0]} m={M.steel} position={[-2.66, 0.95, 0]} />
+      {/* breaker / charger box on the operator side of the radiator frame */}
+      <Box s={[0.2, 0.55, 0.5]} r={0.01} m={M.white} position={[-2.25, 1.6, 0.86]} />
+      <Box s={[0.01, 0.12, 0.2]} m={M.black} position={[-2.145, 1.7, 0.86]} />
       <Cyl r={0.06} l={0.06} m={M.steel} position={[-2.6, 2.57, 0.7]} />
       <Box s={[0.3, 0.25, 0.5]} r={0.03} m={M.black} position={[-2.4, 2.62, -0.6]} />
       {[-1, 1].map((s) => (
@@ -323,7 +338,7 @@ function Bank({ side }: { side: 1 | -1 }) {
         <Part key={x} id="head" o2={[0, 0.35, 0]} position={[x, 0, 0]}>
           <Box s={[0.27, 0.2, 0.46]} r={0.02} m={M.teal} position={[0, 0.54, 0]} />
           <Cyl r={0.008} l={0.2} m={M.steel} position={[0, 0.66, -side * 0.21]} />
-          <Cyl r={0.045} l={0.14} axis="z" m={M.cast} position={[0, 0.52, side * 0.27]} />
+          <Cyl r={0.045} l={0.14} axis="z" m={M.hot} position={[0, 0.52, side * 0.27]} />
           {/* valve springs and injector under the cover */}
           {[-0.06, 0.06].map((dx) => (
             <Cyl key={dx} r={0.02} l={0.08} m={M.steel} position={[dx, 0.67, 0.08]} />
@@ -373,10 +388,10 @@ function TurboWheel({ side }: { side: 1 | -1 }) {
 function Turbo({ position, side }: { position: V3; side: 1 | -1 }) {
   return (
     <group position={position}>
-      <mesh material={M.cast} castShadow>
+      <mesh material={M.hot} castShadow>
         <torusGeometry args={[0.12, 0.07, 12, 24]} />
       </mesh>
-      <Cyl r={0.09} l={0.14} axis="z" m={M.cast} />
+      <Cyl r={0.09} l={0.14} axis="z" m={M.hot} />
       <Cyl r={0.06} l={0.14} axis="z" m={M.steel} position={[0, 0, -side * 0.11]} />
       {/* compressor wheel shows once its housing is lifted off */}
       <group position={[0, 0, -side * 0.22]}>
@@ -399,6 +414,7 @@ function Engine() {
     <group>
       <GhostBlock />
       <ShaftClock />
+      <HotMetal />
       <Part id="sump" o2={[0, -0.2, 1.75]}>
         <Box s={[2.5, 0.48, 0.95]} r={0.03} m={BLOCK} position={[-0.56, 0.68, 0]} />
       </Part>
@@ -459,6 +475,10 @@ function Engine() {
       </Part>
       <Assembled>
         <Pipe pts={[[-1.85, 2.08, 0.15], [-2.05, 2.18, 0.35], [-2.3, 2.3, 0.5]]} r={0.075} m={M.rubber} />
+        {/* two big arching pipes from the front of the engine into the top of the radiator */}
+        {[-1, 1].map((s) => (
+          <Pipe key={s} pts={[[-1.55, 2.02, s * 0.32], [-1.75, 2.45, s * 0.4], [-2.05, 2.62, s * 0.42], [-2.33, 2.56, s * 0.42], [-2.42, 2.45, s * 0.42]]} r={0.085} m={M.black} />
+        ))}
         <Pipe pts={[[-2.02, 1.5, -0.38], [-2.2, 0.75, -0.6], [-2.38, 0.6, -0.7]]} r={0.075} m={M.rubber} />
         <Pipe pts={[[-1.4, 1.92, 0.2], [-1.95, 1.75, 0.65], [-2.38, 1.1, 0.8]]} r={0.055} m={M.rubber} />
         <Pipe pts={[[-1.4, 1.92, -0.2], [-1.95, 1.7, -0.65], [-2.38, 0.95, -0.82]]} r={0.055} m={M.rubber} />
@@ -530,19 +550,36 @@ function Engine() {
   );
 }
 
+const FILTER_X = [-0.05, 0.4, 0.85, 1.3];
+
 function AirCleaners() {
+  // Four dry filters lying across the engine above the flywheel end, one per turbo, on a black cradle.
   return (
     <group>
-      <Box s={[0.9, 0.06, 1.5]} m={M.black} position={[1.5, 2.06, 0]} />
-      {[-0.6, -0.2, 0.2, 0.6].map((z) => (
-        <group key={z}>
-          <Cyl r={0.17} l={0.7} axis="x" m={M.black} position={[1.6, 2.27, z]} />
-          <Cyl r={0.18} l={0.04} axis="x" m={M.steel} position={[1.96, 2.27, z]} />
+      {[-1, 1].map((s) => (
+        <group key={s}>
+          <Box s={[1.75, 0.08, 0.08]} m={M.black} position={[0.62, 2.12, s * 0.3]} />
+          {[0.0, 1.25].map((x) => (
+            <Box key={x} s={[0.08, 0.32, 0.08]} m={M.black} position={[x, 1.98, s * 0.3]} rotation={[s * 0.35, 0, 0]} />
+          ))}
+        </group>
+      ))}
+      {FILTER_X.map((x) => (
+        <group key={x} position={[x, 2.36, 0]}>
+          <Cyl r={0.2} l={0.62} axis="z" m={M.black} />
+          {[-1, 1].map((s) => (
+            <group key={s}>
+              <Cyl r={0.205} l={0.035} axis="z" m={M.steel} position={[0, 0, s * 0.31]} />
+              <Cyl r={0.06} l={0.04} axis="z" m={M.steel} position={[0, 0, s * 0.34]} />
+            </group>
+          ))}
+          {/* restriction indicator */}
+          <Cyl r={0.02} l={0.06} m={M.red} position={[0, 0.22, 0.2]} />
         </group>
       ))}
       <Assembled>
-        {[-0.6, -0.2, 0.2, 0.6].map((z, i) => (
-          <Pipe key={z} pts={[[1.25, 2.27, z], [1.1, 2.24, z * 0.9], [0.92 - (i % 2) * 0.37, 2.12, z < 0 ? -0.64 : 0.64]]} r={0.07} m={M.rubber} />
+        {FILTER_X.map((x, i) => (
+          <Pipe key={x} pts={[[x, 2.2, 0], [x * 0.7 + 0.2, 2.1, i % 2 ? -0.35 : 0.35], [i < 2 ? 0.55 : 0.92, 2.12, i % 2 ? -0.64 : 0.64]]} r={0.075} m={M.rubber} />
         ))}
       </Assembled>
     </group>
@@ -628,19 +665,25 @@ function Alternator() {
           </group>
         ))}
         <Part id="terminal" o2={[0, 0.6, 0]}>
-          <Box s={[0.78, 0.55, 0.85]} r={0.02} m={M.alt} position={[1.62, 1.98, 0]} />
-          <Box s={[0.7, 0.04, 0.78]} m={M.black} position={[1.62, 2.27, 0]} />
+          <Box s={[0.9, 0.78, 1.0]} r={0.02} m={M.alt} position={[1.62, 2.05, 0]} />
+          <Box s={[0.82, 0.04, 0.92]} m={M.black} position={[1.62, 2.45, 0]} />
+          {/* cable gland plate and louvre on the side */}
+          <Box s={[0.5, 0.2, 0.02]} m={M.black} position={[1.62, 1.85, 0.505]} />
           {[0, 1, 2, 3].map((i) => (
-            <Cyl key={i} r={0.03} l={0.03} axis="z" m={M.rubber} position={[1.38 + i * 0.12, 1.85, 0.44]} />
+            <Cyl key={i} r={0.03} l={0.03} axis="z" m={M.rubber} position={[1.44 + i * 0.12, 1.85, 0.52]} />
           ))}
         </Part>
         <Part id="exciter" o2={[0.6, 0, 0]}>
           <Cyl r={0.66} l={0.12} axis="x" seg={40} m={M.alt} position={[2.24, CRANK_Y, 0]} />
-          <mesh material={grilleMat} position={[2.305, CRANK_Y, 0]} rotation={[0, Math.PI / 2, 0]}>
-            <circleGeometry args={[0.5, 40]} />
-          </mesh>
-          <Cyl r={0.3} l={0.16} axis="x" m={M.alt} position={[2.38, CRANK_Y, 0]} />
-          <BoltRing r={0.6} n={16} m={M.steel} position={[2.305, CRANK_Y, 0]} />
+          {/* air inlet louvres around the cone */}
+          {[-1, 1].map((s) => (
+            <mesh key={s} material={grilleMat} position={[2.3, CRANK_Y + 0.62 * 0, s * 0.665]} rotation={[0, s > 0 ? 0 : Math.PI, 0]}>
+              <planeGeometry args={[0.1, 0.6]} />
+            </mesh>
+          ))}
+          <Cyl r={0.6} r2={0.3} l={0.22} axis="x" m={M.alt} position={[2.41, CRANK_Y, 0]} />
+          <Cyl r={0.3} r2={0.22} l={0.18} axis="x" m={M.alt} position={[2.6, CRANK_Y, 0]} />
+          <BoltRing r={0.62} n={16} m={M.steel} position={[2.3, CRANK_Y, 0]} />
         </Part>
       </Part>
       <Assembled>

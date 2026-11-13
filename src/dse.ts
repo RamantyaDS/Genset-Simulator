@@ -51,7 +51,7 @@ function pages(s: State): [string, string[]][] {
   const clock = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const list: [string, string[]][] = [
     [`Status|${clock}`, [st, sub, s.mode === 'stop' ? '' : s.mode === 'auto' ? 'Auto Mode' : s.mode === 'test' ? 'Test Mode' : 'Manual Mode'].filter((x, i, a) => x && a.indexOf(x) === i)],
-    ['Engine', [`${f0(s.rpm)} RPM`, `Oil Pressure  ${f1(s.oil)} bar`, `Coolant Temp  ${f0(s.coolant)} °C`, `Battery       ${f1(s.battery)} V`, `Run Time  ${s.hours.toFixed(1)} h`, `Fuel Level    ${f0((s.fuel / TANK_L) * 100)} %`]],
+    ['Engine', [`${f0(s.rpm)} RPM`, `Oil Pressure  ${f1(s.oil)} bar`, `Coolant Temp  ${f0(s.coolant)} °C`, `Exhaust Temp  ${f0(s.exhaust)} °C`, `Battery       ${f1(s.battery)} V`, `Run Time  ${s.hours.toFixed(1)} h`, `Fuel Level    ${f0((s.fuel / TANK_L) * 100)} %`]],
     ['Generator', [`${f1(hz(s))} Hz`, `L-L  ${f0(s.volts)} ${f0(s.volts)} ${f0(s.volts)} V`, `L-N  ${f0(vln)} ${f0(vln)} ${f0(vln)} V`, `Amps ${f0(amps(s))} A`, `kW   ${f0(s.genKw)} kW`, `kVA  ${f0(genKva(s))} kVA`, `pf   ${s.genKw > 0 ? RATING.pf.toFixed(2) : '----'}`, `${f0(s.kwh)} kWh`]],
     ['Mains', s.mainsOk ? ['50.0 Hz', 'L-L  400 400 400 V', 'L-N  231 231 231 V'] : ['0.0 Hz', 'L-L  0 0 0 V', 'L-N  0 0 0 V']],
   ];

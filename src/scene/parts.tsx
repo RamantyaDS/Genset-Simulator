@@ -14,6 +14,8 @@ export const M = {
   silver: new THREE.MeshStandardMaterial({ color: '#c7cacc', metalness: 0.75, roughness: 0.35 }),
   steel: new THREE.MeshStandardMaterial({ color: '#8b9095', metalness: 0.85, roughness: 0.3 }),
   cast: new THREE.MeshStandardMaterial({ color: '#4a4744', metalness: 0.6, roughness: 0.6 }),
+  // turbine housings and exhaust stubs: glow when hot (driven by HotMetal in Genset.tsx)
+  hot: new THREE.MeshStandardMaterial({ color: '#4a4744', metalness: 0.6, roughness: 0.6, emissive: '#000000' }),
   white: new THREE.MeshStandardMaterial({ color: '#eceeee', metalness: 0.1, roughness: 0.45 }),
   red: new THREE.MeshStandardMaterial({ color: '#c3232b', metalness: 0.2, roughness: 0.45 }),
   yellow: new THREE.MeshStandardMaterial({ color: '#e8b923', metalness: 0.2, roughness: 0.5 }),

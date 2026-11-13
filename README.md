@@ -18,7 +18,7 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 
 - Tur "Cara kerja genset": 13 bab, mulai dari mesin diesel, turbo, pendingin, alternator, bahan bakar, panel DSE, cara menyalakan, saat PLN padam, beban dan kapasitas, proteksi, open vs silent, sampai tes rutin. Kamera menyorot bagian yang dibahas dan setiap bab punya contoh yang bisa dicoba
 - Tes genset tanpa memadamkan PLN: nyalakan tanpa beban (mode Manual), tes beban gedung (mode Test), atau tes dengan load bank
-- Model 3D yang dibangun dari kode, dengan ukuran mengikuti datasheet: base frame, radiator dan kipas, mesin V16 dengan kepala silinder per silinder, turbo, alternator, dan panel
+- Model 3D yang dibangun dari kode, dengan ukuran mengikuti datasheet dan bentuk mengikuti foto genset Perkins 4016 open type: base frame, radiator dan kipas, mesin V16 dengan kepala silinder per silinder, 4 turbo, 4 filter udara melintang, alternator dengan tutup kerucut, dan panel
 - Open type dan silent type (kanopi kontainer 40 ft dengan silencer di atap)
 - Panel DSE7320 yang bisa dipencet, dengan tata letak sesuai manual 057-253: mode Stop, Manual, Test, Auto, tombol Start, transfer beban, halaman layar Status, Engine, Generator, Mains, dan Alarms, LED mimic, serta lampu tes
 - Skenario PLN padam memakai urutan dan timer default pabrik DSE: transient 2 detik, start delay 5 detik, crank 10 detik (3 kali percobaan), safety delay 10 detik, transfer 0,7 detik, return delay 30 detik, cooling 60 detik
@@ -29,6 +29,7 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 - X-ray: aliran solar, udara turbo, gas buang, air pendingin, dan listrik
 - Bongkar dua level: rakitan utama, lalu setiap komponen (16 kepala silinder, tutup rocker, manifold, 4 turbo, charge air cooler, bak oli, gear case, pompa air, filter, starter, rotor dan stator alternator, exciter, kotak terminal). Blok mesin menjadi transparan sehingga poros engkol dan 16 piston terlihat bergerak, lengkap dengan kilatan langkah usaha. Klik komponen mana saja untuk melihat nama dan fungsinya
 - Suara mesin disintesis per silinder dengan AudioWorklet: 16 ledakan tiap dua putaran (200 per detik pada 1500 rpm), masing-masing berisi dentuman knalpot, bunyi pembakaran, dan ketukan diesel. Ada juga starter yang tersendat tiap langkah kompresi, mesin yang tersendat saat mulai hidup, suara makin berat saat dibebani, ketukan lebih keras saat mesin dingin, turbo, kipas, gema lingkungan, klak breaker, dan buzzer alarm. Suara lebih redam di dalam kanopi silent
+- Efek panas: rumah turbo dan pipa buang tiap silinder membara merah saat suhu gas buang tinggi (beban berat atau overload), udara di atas knalpot dan di depan radiator tampak bergetar (heat shimmer), dan suhu gas buang tampil di halaman Engine panel DSE
 - Asap knalpot seperti diesel asli: uap putih saat starter, kepulan hitam saat mesin menyala, kabut putih kebiruan saat mesin masih dingin, jelaga hitam saat beban naik mendadak (turbo lag), hampir bening saat jalan normal, dan abu-abu gelap saat overload
 - Narasi bahasa Indonesia yang menjelaskan apa yang sedang terjadi di setiap tahap
 

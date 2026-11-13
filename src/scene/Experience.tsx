@@ -10,6 +10,7 @@ import { Canopy, CANOPY, SILENT_STACK } from './Canopy';
 import { PANEL_POS } from './ControlPanel';
 import { Flows } from './Flows';
 import { FocusHighlight } from './FocusHighlight';
+import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
 import { LoadBank } from './LoadBank';
 import { Site } from './Site';
@@ -53,6 +54,14 @@ export function Experience() {
   const view = useUI((s) => s.view);
   const silent = view === 'silent';
   const shift: [number, number, number] = silent ? [SILENT_SHIFT, CANOPY.base, 0] : [0, 0, 0];
+  // Hot air: exhaust rises and drifts downwind; radiator air blows out of the radiator face (or the canopy's louvred end).
+  const stack: [number, number, number] = silent ? SILENT_STACK : [0.74, 2.62, 0];
+  const haze: HazeSources = {
+    exhaust: { from: stack, to: [stack[0] + 0.9, stack[1] + 3.2, stack[2]], width: 0.45 },
+    radiator: silent
+      ? { from: [-6.15, 1.6, 0], to: [-7.6, 2.6, 0], width: 1.1 }
+      : { from: [-2.9, 1.4, 0], to: [-4.3, 2.3, 0], width: 0.95 },
+  };
   const panelWorld: [number, number, number] = [PANEL_POS[0] + shift[0], PANEL_POS[1] + shift[1], PANEL_POS[2]];
   return (
     <Canvas shadows dpr={[1, 2]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
@@ -87,12 +96,13 @@ export function Experience() {
       {silent && <Canopy />}
       <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
       <FocusHighlight />
-      <Smoke key={view} at={silent ? SILENT_STACK : [0.74, 2.62, 0]} />
+      <Smoke key={view} at={stack} />
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={45} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
       <Intro />
       <Driver />
       <EffectComposer>
+        <HeatHaze sources={haze} />
         <Bloom mipmapBlur luminanceThreshold={1} intensity={0.8} />
       </EffectComposer>
     </Canvas>

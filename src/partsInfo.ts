@@ -9,7 +9,7 @@ export const PART_INFO: Record<string, { name: string; desc: string }> = {
   rocker: { name: 'Tutup rocker (rocker cover)', desc: 'Penutup mekanisme pengungkit katup (rocker arm). Oli melumasi di bawahnya.' },
   exhaust: { name: 'Manifold buang', desc: 'Mengumpulkan gas buang panas (sekitar 450–550 °C) dari 8 silinder tiap sisi dan mengalirkannya ke turbo. Dibungkus pelindung panas.' },
   intake: { name: 'Manifold udara masuk', desc: 'Membagi udara bertekanan dari turbo ke tiap silinder, di tengah huruf V.' },
-  turbo: { name: 'Turbocharger (4 buah)', desc: 'Gas buang memutar roda turbin, yang satu poros dengan roda kompresor pemompa udara segar. Putarannya puluhan ribu rpm. Makin berat beban, makin cepat berputar.' },
+  turbo: { name: 'Turbocharger (4 buah)', desc: 'Gas buang memutar roda turbin, yang satu poros dengan roda kompresor pemompa udara segar. Putarannya puluhan ribu rpm. Makin berat beban, makin cepat berputar. Pada beban berat gas buang mencapai sekitar 600 °C, sehingga rumah turbinnya bisa membara merah kalau dilihat dalam gelap.' },
   aftercooler: { name: 'Charge air cooler', desc: 'Mendinginkan udara panas dari turbo memakai air (air-to-water) supaya udara lebih padat dan oksigennya lebih banyak.' },
   aircleaner: { name: 'Filter udara', desc: 'Empat filter kering, satu untuk tiap turbo. Mesin ini menghisap ratusan meter kubik udara per menit, jadi debu sekecil apa pun harus tersaring.' },
   sump: { name: 'Bak oli (sump)', desc: 'Menampung oli mesin. Total sistem pelumasan sekitar 237 liter. Pompa oli menghisap dari sini dan menyemprotkannya ke bantalan poros engkol, piston, dan turbo.' },
