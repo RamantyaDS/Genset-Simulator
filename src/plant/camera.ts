@@ -12,7 +12,7 @@ const VIEWS: Record<PlantCam, [number[], number[]]> = {
   inside: [[-25, 3.2, 6.5], [6, 2, -1]],
   control: [[24, 3.4, 4], [33, 2.2, 0]],
   site: [[-60, 45, 70], [0, 0, 10]],
-  complex: [[-40, 70, 60], [5, 0, 175]],
+  complex: [[95, 105, 300], [50, 0, 175]],
 };
 export const goPlant = (c: PlantCam) => {
   const [p, t] = VIEWS[c];

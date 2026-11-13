@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { busLive, closeBreaker, create, DAY_L, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
+import { busLive, closeBreaker, create, DAY_L, startScenario, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
 
 const run = (p: Plant, s: number, dt = 0.02) => {
   for (let t = 0; t < s; t += dt) step(p, dt);
@@ -154,5 +154,37 @@ describe('testing one set like the single set', () => {
     drainDayTank(p, 0);
     run(p, 1);
     expect(p.units[0].alarm).toBe('Solar habis');
+  });
+});
+
+describe('scenarios', () => {
+  it('overhaul locks G3; peak crop runs the mill at 90 t/h through the night', () => {
+    const p = create();
+    startScenario(p, 'overhaul');
+    startUnit(p, 2);
+    expect(p.units[2].phase).toBe('rest');
+    expect(p.goal?.id).toBe('overhaul');
+    startScenario(p, 'panen');
+    expect(p.units[2].locked).toBe(false);
+    expect(p.tph).toBe(90);
+    expect(p.pksAllDay).toBe(true);
+  });
+});
+
+describe('the heavier complex', () => {
+  it('peaks near 6 MW, and the master keeps up even on the 20x clock, motor starts and all', () => {
+    for (let k = 0; k < 3; k++) {
+      const p = create();
+      p.master = true;
+      p.timeScale = 20;
+      let peak = 0;
+      for (let t = 0; t < 72; t += 0.02) {
+        step(p, 0.02);
+        peak = Math.max(peak, loadKw(p));
+      }
+      expect(peak).toBeGreaterThan(5800);
+      expect(p.stats.trips).toBe(0);
+      expect(p.stats.shed).toBe(0);
+    }
   });
 });

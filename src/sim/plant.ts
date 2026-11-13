@@ -50,6 +50,7 @@ export interface Unit {
   overloadFor: number;
   dipF: number; // off-bus speed dip after a load step (fraction), damped spring
   dipFv: number;
+  locked: boolean; // out for overhaul: cannot be started
   dayTank: number; // litres
   pumpAuto: boolean; // transfer pump on its level switch (off: the day tank is not refilled)
   pumping: boolean;
@@ -88,31 +89,98 @@ export interface Plant {
   stats: { kwh: number; litres: number; outageMin: number; shed: number; badSync: number; trips: number };
   events: string[];
   message: string;
+  tph: number; // mill throughput, tonnes of fresh fruit bunches per hour
+  loadMul: number; // whole-complex load multiplier (test slider)
+  pksAllDay: boolean; // peak crop: the mill runs two shifts through the night
+  inrush: { name: string; kw: number; t: number }[]; // motors starting direct on line: extra kW decaying to running load
+  shipMin: number; // simulated minutes left of ship loading at the jetty
+  goal: Goal | null;
 }
 
+export type ScenarioId = 'bebas' | 'panen' | 'overhaul' | 'hemat';
+export interface Goal {
+  id: ScenarioId;
+  start: number; // absolute simulated minute the challenge started
+  blackouts: number;
+  usedMaster: boolean;
+  done: boolean;
+  passed: boolean;
+  result: string;
+}
+export const SCENARIOS: Record<ScenarioId, { name: string; brief: string }> = {
+  bebas: { name: 'Bebas', brief: 'Tidak ada target. Atur beban dengan slider dan coba apa saja.' },
+  panen: {
+    name: 'Panen puncak',
+    brief: 'Musim panen raya: PKS dinaikkan ke 90 t/jam dan jalan dua shift sampai malam. Lewati 24 jam tanpa lepas beban dan tanpa padam.',
+  },
+  overhaul: {
+    name: 'G3 overhaul',
+    brief: 'G3 sedang turun mesin dan tidak bisa dipakai. Empat genset sisanya harus melewati 24 jam, termasuk puncak malam, tanpa lepas beban.',
+  },
+  hemat: {
+    name: 'Hemat solar',
+    brief:
+      'Operasikan manual tanpa kontrol otomatis selama 24 jam: efisiensi rata-rata di bawah 0,262 L/kWh dan tanpa lepas beban. Jalankan genset di 60–90%, jangan banyak unit berbeban ringan.',
+  },
+};
+export const HEMAT_SFC = 0.262;
+
+// Shed order: 1 goes first. Homes and the clinic/water supply are kept longest; the mill outranks the downstream
+// plants because fresh fruit bunches spoil within a day.
 const FEEDERS: [string, string, number][] = [
-  ['Pabrik kelapa sawit (PKS) 60 t/jam', 'PKS', 3],
-  ['Pabrik inti sawit (kernel)', 'Kernel', 2],
-  ['Perumahan, sekolah, masjid', 'Perumahan', 5],
+  ['Pabrik kelapa sawit (PKS)', 'PKS', 5],
+  ['Kernel crushing plant (KCP)', 'KCP', 3],
+  ['Perumahan karyawan (ber-AC), sekolah, masjid', 'Perumahan', 6],
   ['Kantor dan bengkel', 'Kantor', 1],
-  ['Air bersih dan klinik', 'Air & klinik', 4],
+  ['Air bersih dan klinik', 'Air & klinik', 7],
+  ['Refinery minyak goreng', 'Refinery', 4],
+  ['Bulking station dan dermaga', 'Bulking', 2],
 ];
 
-/** Load profile of each feeder (kW) by hour of day. Estimates for a 60 t/h mill complex. */
-export function profile(feeder: number, h: number): number {
+/** Motors big enough to be felt when they start direct on line, by feeder: [name, running kW]. */
+const MOTORS: Record<number, [string, number][]> = {
+  0: [
+    ['ID fan boiler', 250],
+    ['pompa umpan boiler', 160],
+    ['screw press', 110],
+  ],
+  1: [['expeller KCP', 200]],
+  5: [
+    ['kompresor vakum refinery', 315],
+    ['pompa sirkulasi refinery', 110],
+  ],
+  6: [['pompa muat kapal', 200]],
+};
+
+/** Mill process load: ~18 kW per t/h on top of ~300 kW of standby (boiler banked, lighting, effluent pumps). */
+export const millKw = (tph: number) => 18 * tph;
+
+/** Load profile of each feeder (kW) by hour of day, before the complex multiplier. Estimates for a palm oil complex
+ *  with a mill, kernel crushing, a cooking-oil refinery, a bulking station and staff housing; peak about 6.3 MW. */
+export function profile(feeder: number, h: number, tph = 60, allDay = false): number {
   const between = (a: number, b: number) => (h >= a && h < b ? 1 : 0);
-  const ramp = (x: number, a: number, b: number) => Math.max(0, Math.min(1, (x - a) / (b - a)));
   switch (feeder) {
-    case 0: // mill processes from early morning to late evening, cleaning and standby overnight
-      return 300 + 1050 * ramp(h, 5.5, 7) * (1 - ramp(h, 22, 23.5));
-    case 1:
-      return 880 + 40 * Math.sin(h);
-    case 2: // homes: morning bump, evening peak
-      return 330 + 380 * Math.exp(-((h - 6) ** 2) / 1.2) + 120 * between(7, 17) + 950 * Math.exp(-((h - 19.5) ** 2) / 3.5);
+    case 0: {
+      // Start-up in steps from 05:30 (boiler fans and sterilisers, then threshing and presses, then clarification),
+      // a lunch break, a dip at the 14:00 shift change, run-down after 22:00 unless running two full shifts.
+      const up = h < 5.5 ? 0 : h < 6 ? 0.3 : h < 6.5 ? 0.65 : h < 7 ? 0.85 : 1;
+      const down = allDay ? 1 : h >= 23 ? 0 : h >= 22 ? 0.4 : 1;
+      const breaks = 1 - 0.3 * between(12, 12.67) - 0.4 * between(14, 14.25);
+      const run = allDay ? 1 : up;
+      return 300 + millKw(tph) * run * down * breaks;
+    }
+    case 1: // kernel crushing: expellers run round the clock
+      return 900 + 60 * Math.sin(h * 0.8);
+    case 2: // air-conditioned homes: morning bump, long evening peak
+      return 420 + 420 * Math.exp(-((h - 6) ** 2) / 1.2) + 160 * between(7, 17) + 1330 * Math.exp(-((h - 20) ** 2) / 5);
     case 3:
-      return 80 + 420 * between(7, 17);
-    default:
+      return 100 + 520 * between(7, 17);
+    case 4:
       return 230 + 150 * Math.exp(-((h - 6.5) ** 2) / 1.5) + 150 * Math.exp(-((h - 18.5) ** 2) / 2);
+    case 5: // refinery: continuous, slightly more by day (packing line)
+      return 1420 + 160 * between(7, 19) + 60 * Math.sin(h * 1.3);
+    default: // bulking station: tank heating and transfer pumps; ship loading adds on top (see `shipMin`)
+      return 280;
   }
 }
 
@@ -147,6 +215,7 @@ export function create(): Plant {
       overloadFor: 0,
       dipF: 0,
       dipFv: 0,
+      locked: false,
       dayTank: DAY_L * (0.85 + 0.03 * i),
       pumpAuto: true,
       pumping: false,
@@ -172,7 +241,49 @@ export function create(): Plant {
     stats: { kwh: 0, litres: 0, outageMin: 0, shed: 0, badSync: 0, trips: 0 },
     events: [],
     message: '',
+    tph: 60,
+    loadMul: 1,
+    pksAllDay: false,
+    inrush: [],
+    shipMin: 0,
+    goal: null,
   };
+}
+
+/** Start a challenge from a fresh 05:00 with the bus dead (or free play). */
+export function startScenario(p: Plant, id: ScenarioId) {
+  const keep = { timeScale: p.timeScale, ufls: p.ufls };
+  Object.assign(p, create(), keep);
+  if (id === 'panen') {
+    p.tph = 90;
+    p.pksAllDay = true;
+  }
+  if (id === 'overhaul') {
+    const u = p.units[2];
+    u.locked = true;
+    u.alarm = 'Overhaul';
+  }
+  if (id !== 'bebas') p.goal = { id, start: p.clock, blackouts: 0, usedMaster: false, done: false, passed: false, result: '' };
+  say(p, `${SCENARIOS[id].name}: ${SCENARIOS[id].brief}`);
+}
+
+/** A big motor somewhere in the complex starts direct on line. */
+export function motorStart(p: Plant, feeder?: number) {
+  const live = p.feeders.filter((f) => f.on && MOTORS[f.id]);
+  const f = feeder !== undefined ? p.feeders[feeder] : live[Math.floor(Math.random() * live.length)];
+  if (!f || !busLive(p) || !f.on || !MOTORS[f.id]) return;
+  const list = MOTORS[f.id];
+  const [name, kw] = list[Math.floor(Math.random() * list.length)];
+  p.inrush.push({ name, kw, t: 0 });
+  p.events.push('motor');
+  bump(p, -((kw * 2.5) / Math.max(1, capacityKw(p))) * 2.2);
+  say(p, `Motor ${name} ${kw} kW start langsung (DOL): arus awal sekitar 6× normal, frekuensi dan tegangan bus turun sesaat.`);
+}
+
+export function shipArrives(p: Plant) {
+  if (p.shipMin > 0) return;
+  p.shipMin = 6 * 60;
+  say(p, 'Kapal tanker sandar di dermaga. Pompa muat CPO jalan sekitar 6 jam: beban bulking naik sekitar 800 kW.');
 }
 
 // ---------- derived ----------
@@ -182,8 +293,13 @@ export const busLive = (p: Plant) => online(p).length > 0;
 export const loadKw = (p: Plant) => (busLive(p) ? p.feeders.reduce((a, f) => a + (f.on ? f.demand : 0), 0) : 0);
 /** Load banks hang on the set side of the breaker, so a closed breaker puts them on the bus. */
 export const bankKw = (u: Unit) => (u.loadBank && available(u) ? u.loadBankKw : 0);
-export const busLoadKw = (p: Plant) => loadKw(p) + online(p).reduce((a, u) => a + bankKw(u), 0);
+/** Starting motors draw several times their running current; as real power that shows as a short surge. */
+export const inrushKw = (p: Plant) => (busLive(p) ? p.inrush.reduce((a, m) => a + m.kw * 2.5 * Math.exp(-m.t / 0.9), 0) : 0);
+export const busLoadKw = (p: Plant) => loadKw(p) + inrushKw(p) + online(p).reduce((a, u) => a + bankKw(u), 0);
 export const demandKw = (p: Plant) => p.feeders.reduce((a, f) => a + f.demand, 0);
+/** Expected complex demand at hour `h` (no flicker), for planning ahead. */
+export const demandAt = (p: Plant, h: number) =>
+  (p.feeders.reduce((a, f) => a + profile(f.id, ((h % 24) + 24) % 24, p.tph, p.pksAllDay), 0) + (p.shipMin > 0 ? 800 : 0)) * p.loadMul;
 export const capacityKw = (p: Plant) => online(p).length * PRIME_KW;
 export const available = (u: Unit) => u.phase === 'running' && u.rpm > 1450 && u.volts > 360;
 export const hourOf = (p: Plant) => p.clock / 60;
@@ -211,6 +327,7 @@ const say = (p: Plant, m: string) => (p.message = m);
 
 export function startUnit(p: Plant, i: number) {
   const u = p.units[i];
+  if (u.locked) return say(p, `G${i + 1} sedang overhaul (turun mesin) dan tidak bisa dinyalakan.`);
   if (u.eStop) return say(p, `Emergency stop genset ${i + 1} masih ditekan. Lepas dulu.`);
   if (u.alarm) return say(p, `Genset ${i + 1} masih ada alarm (${u.alarm}). Reset dulu.`);
   if (u.dayTank <= 1) return say(p, `Tangki harian G${i + 1} kosong. Isi dulu dari tangki induk.`);
@@ -233,7 +350,7 @@ export function stopUnit(p: Plant, i: number) {
 
 export function resetUnit(p: Plant, i: number) {
   const u = p.units[i];
-  if (u.rpm < 1 && !u.eStop) u.alarm = null;
+  if (u.rpm < 1 && !u.eStop && !u.locked) u.alarm = null;
 }
 
 /** Drain a day tank (fault drill) or refill it at once from the bulk tanks. */
@@ -358,6 +475,7 @@ function blackout(p: Plant, all = true) {
   p.busV = 0;
   p.dip = 0;
   p.events.push('blackout');
+  if (p.goal && !p.goal.done) p.goal.blackouts++;
   say(p, 'PADAM TOTAL (blackout). Mulai lagi dari black start: satu genset ke bus mati, lalu sinkronkan yang lain.');
 }
 
@@ -381,7 +499,21 @@ export function step(p: Plant, dt: number) {
   }
   const h = hourOf(p);
   // Feeder demand with a little flicker.
-  p.feeders.forEach((f, i) => (f.demand = profile(i, h) * (1 + 0.015 * Math.sin(p.clock * 3.1 + i * 7))));
+  p.feeders.forEach(
+    (f, i) =>
+      (f.demand =
+        (profile(i, h, p.tph, p.pksAllDay) + (i === 6 && p.shipMin > 0 ? 800 : 0)) * p.loadMul * (1 + 0.015 * Math.sin(p.clock * 3.1 + i * 7))),
+  );
+  if (p.shipMin > 0) {
+    p.shipMin = Math.max(0, p.shipMin - simMin);
+    if (p.shipMin === 0) say(p, 'Kapal selesai dimuat dan berangkat. Beban bulking kembali normal.');
+  }
+  // Random events: a big motor start about every 40 real seconds (a transient, so not on the fast clock), a ship
+  // about once a simulated day.
+  if (busLive(p) && Math.random() < dt / 40) motorStart(p);
+  if (p.shipMin === 0 && Math.random() < simMin / (20 * 60)) shipArrives(p);
+  for (const m of p.inrush) m.t += dt;
+  p.inrush = p.inrush.filter((m) => m.t < 4);
 
   // Units: start, run-up, free running frequency/voltage, cool-down.
   for (const u of p.units) {
@@ -428,7 +560,7 @@ export function step(p: Plant, dt: number) {
     }
     // Auto-synchroniser: a small positive slip, voltage matched, closes in the window.
     if (u.syncing && busLive(p) && available(u) && !u.breaker) {
-      const wantHz = p.busHz + 0.08 - NOMINAL_HZ;
+      const wantHz = p.busHz + 0.12 - NOMINAL_HZ;
       u.setHz += Math.sign(wantHz - u.setHz) * Math.min(Math.abs(wantHz - u.setHz), dt * 0.5);
       const wantV = p.busV / NOMINAL_V - 1;
       u.setV += Math.sign(wantV - u.setV) * Math.min(Math.abs(wantV - u.setV), dt * 0.05);
@@ -464,7 +596,7 @@ export function step(p: Plant, dt: number) {
     const avgSet = on.reduce((a, u) => a + u.setHz, 0) / on.length;
     p.busHz = NOMINAL_HZ + avgSet * 0.2 + p.dip - sag;
     const avgV = on.reduce((a, u) => a + u.setV, 0) / on.length;
-    p.busV = NOMINAL_V * (1 + avgV) * (1 - Math.max(0, -p.dip) * 0.01);
+    p.busV = NOMINAL_V * (1 + avgV) * (1 - Math.max(0, -p.dip) * 0.01) * (1 - 0.12 * Math.min(1, inrushKw(p) / Math.max(1, limit)));
     for (const u of on) {
       u.hz = p.busHz;
       u.rpm = p.busHz * 30;
@@ -563,6 +695,24 @@ export function step(p: Plant, dt: number) {
       say(p, 'Truk tangki selesai mengisi 16.000 L.');
     }
   }
+  // Challenge: judged after 24 simulated hours.
+  const g = p.goal;
+  if (g && !g.done && p.master && g.id === 'hemat') g.usedMaster = true;
+  if (g && !g.done && (p.day - 1) * 1440 + p.clock - g.start >= 1440) {
+    const sfc = p.stats.kwh > 1 ? p.stats.litres / p.stats.kwh : 1;
+    const fails: string[] = [];
+    if (p.stats.shed) fails.push(`${p.stats.shed}× lepas beban`);
+    if (g.blackouts) fails.push(`${g.blackouts}× padam total`);
+    if (g.usedMaster) fails.push('kontrol otomatis sempat dinyalakan');
+    if (g.id === 'hemat' && sfc >= HEMAT_SFC) fails.push(`efisiensi ${sfc.toFixed(3)} L/kWh (target < ${HEMAT_SFC})`);
+    g.done = true;
+    g.passed = !fails.length;
+    g.result = g.passed
+      ? `Berhasil! ${SCENARIOS[g.id].name} lulus: 24 jam tanpa lepas beban, efisiensi ${sfc.toFixed(3)} L/kWh.`
+      : `Belum lulus: ${fails.join(', ')}. Coba lagi.`;
+    say(p, g.result);
+  }
+
   // Customers without power.
   for (const f of p.feeders) if (!(f.on && busLive(p))) f.outageMin += simMin;
   p.stats.outageMin += p.feeders.filter((f) => !(f.on && busLive(p))).length * simMin;
@@ -570,7 +720,10 @@ export function step(p: Plant, dt: number) {
 
 function master(p: Plant, dt: number) {
   const on = online(p);
-  const demand = demandKw(p);
+  // Look ahead by the time a set needs to start and synchronise (~20 real seconds), which on the fast clock is
+  // a good part of an hour: start early for a rising load, keep sets on when it is about to rise.
+  const ahead = hourOf(p) + Math.min(2, (p.timeScale * 20) / 60);
+  const demand = Math.max(demandKw(p), demandAt(p, ahead));
   // Black start when the bus is dead.
   if (!on.length) {
     const ready = p.units.find((u) => u.auto && available(u));
@@ -583,14 +736,14 @@ function master(p: Plant, dt: number) {
   }
   const cap = on.length * PRIME_KW;
   // Start another set when the coming load would exceed ~80% of what is online.
+  // As many as the coming load needs, started together when the gap is large.
   p.autoUp = demand > 0.8 * cap ? p.autoUp + dt : 0;
   if (p.autoUp > 1.5) {
     p.autoUp = 0;
-    const incoming = p.units.find((u) => u.auto && !u.breaker && (u.phase === 'crank' || u.phase === 'running'));
-    if (!incoming) {
-      const pick = p.units.filter((u) => u.auto && !u.alarm && u.phase === 'rest').sort((a, b) => a.hours - b.hours)[0];
-      if (pick) startUnit(p, pick.id);
-    }
+    const incoming = p.units.filter((u) => u.auto && !u.breaker && (u.phase === 'crank' || u.phase === 'running')).length;
+    const need = Math.ceil(demand / (0.8 * PRIME_KW)) - on.length - incoming;
+    const idle = p.units.filter((u) => u.auto && !u.alarm && u.phase === 'rest').sort((a, b) => a.hours - b.hours);
+    for (const u of idle.slice(0, Math.max(incoming ? 0 : 1, need))) startUnit(p, u.id);
   }
   for (const u of p.units) if (u.auto && !u.breaker && available(u) && !u.syncing) setSync(p, u.id, true);
   // Drop a set when the rest could carry the load at under ~65%.

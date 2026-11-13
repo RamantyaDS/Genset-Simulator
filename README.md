@@ -37,7 +37,10 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 
 Tombol "Mode pembangkit 5 unit" (atau `?mode=plant`) membuka PLTD kecil: lima genset 2250 kVA berjajar di dalam hall, memasok kawasan pabrik kelapa sawit lewat jaringan 20 kV.
 
-- Kawasan yang dilayani: PKS 60 t/jam, pabrik inti (kernel), perumahan, sekolah dan masjid, kantor dan bengkel, air bersih dan klinik. Beban tiap feeder mengikuti jam (puncak sekitar 4 MW pada malam hari)
+- Kawasan yang dilayani lewat 7 penyulang: PKS (30–90 t/jam), kernel crushing plant, refinery minyak goreng, bulking station dan dermaga, perumahan karyawan ber-AC dengan sekolah dan masjid, kantor dan bengkel, air bersih dan klinik. Beban tiap penyulang mengikuti jam; puncaknya sekitar 6,1 MW pada malam hari (6,9 MW saat kapal muat), sesuai rancangan N+1: empat genset kerja keras di jam puncak, satu cadangan
+- Kejadian: PKS start bertahap pagi hari (boiler, rebusan, press, klarifikasi), istirahat siang dan ganti shift, motor besar start langsung (DOL) dengan lonjakan arus yang menurunkan frekuensi dan tegangan sesaat, kapal tanker sandar dan memuat CPO selama 6 jam
+- Skenario tantangan selama 24 jam: Panen puncak (PKS 90 t/jam dua shift), G3 overhaul (hanya 4 genset), dan Hemat solar (operasi manual di bawah 0,262 L/kWh), semuanya tanpa lepas beban
+- Slider kapasitas PKS dan pengali beban seluruh kawasan (50–150%), serta tombol start motor besar dan kapal sandar, untuk mendorong genset sampai batasnya
 - Black start: genset pertama boleh menutup breaker ke bus yang masih mati (dead bus)
 - Sinkronisasi manual dengan sinkroskop: atur frekuensi dan tegangan, lalu tutup breaker saat jarum mendekati jam 12 (selisih di bawah 0,2 Hz, 4% tegangan, dan 15°). Menutup di luar fase membuat genset trip
 - Pembagian beban kW merata antar unit (isochronous load sharing); frekuensi bus turun bila beban melebihi kapasitas

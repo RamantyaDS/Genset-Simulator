@@ -476,9 +476,11 @@ function Complex() {
       </Text>
       {/* kernel crushing plant */}
       <Building pos={[62, 0, 168]} size={[20, 10, 16]} color="#8e9a7a" win={kernel} />
-      <Text position={[62, 11, 176.5]} fontSize={1.4} color="#ffffff">
-        PABRIK INTI
+      <Text position={[62, 11, 176.5]} fontSize={1.2} color="#ffffff">
+        KERNEL CRUSHING PLANT
       </Text>
+      <Refinery />
+      <Bulking />
       {/* housing, school, mosque, clinic */}
       {houses.map(([x, z]) => (
         <group key={`${x}${z}`}>
@@ -526,6 +528,78 @@ function Complex() {
           </mesh>
         </group>
       ))}
+    </group>
+  );
+}
+
+/** Cooking-oil refinery: process building with its tall bleaching/deodorising columns, a packing hall and a stack. */
+function Refinery() {
+  const win = useLitMaterial(5, false);
+  return (
+    <group position={[88, 0, 122]}>
+      <Building pos={[0, 0, 0]} size={[26, 12, 16]} color="#a7b3bd" win={win} rows={3} />
+      {[-8, -3, 2].map((x, i) => (
+        <group key={x}>
+          <Cyl r={1.6} l={22 + i * 3} m={M.steel} position={[x, (22 + i * 3) / 2, -11]} />
+          <Cyl r={1.7} l={0.4} m={M.cast} position={[x, 22 + i * 3, -11]} />
+        </group>
+      ))}
+      {/* pipe rack between columns and building */}
+      <Box s={[20, 0.4, 0.4]} m={M.steel} position={[-2, 9, -8.5]} />
+      <Box s={[20, 0.4, 0.4]} m={M.steel} position={[-2, 10, -8.5]} />
+      <Cyl r={0.8} l={26} m={M.white} position={[11, 13, -6]} />
+      <Building pos={[0, 0, 15]} size={[22, 7, 12]} color="#c9cfd4" win={win} rows={1} />
+      <Text position={[0, 13.5, 8.1]} fontSize={1.4} color="#ffffff">
+        REFINERY MINYAK GORENG
+      </Text>
+    </group>
+  );
+}
+
+/** Bulking station by the river: CPO storage tanks with heating, a control room, the jetty, and a tanker when one is
+ *  loading (from `shipMin`). */
+function Bulking() {
+  const win = useLitMaterial(6, false);
+  const ship = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const g = ship.current!;
+    g.visible = plant.shipMin > 0;
+    g.position.y = Math.sin(clock.elapsedTime * 0.6) * 0.12;
+  });
+  return (
+    <group>
+      {/* river */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[178, 0.03, 190]}>
+        <planeGeometry args={[44, 200]} />
+        <meshStandardMaterial color="#1f4d63" roughness={0.25} metalness={0.2} />
+      </mesh>
+      {[0, 1].map((r) =>
+        [0, 1].map((c) => (
+          <group key={`${r}${c}`} position={[118 + c * 18, 0, 180 + r * 18]}>
+            <Cyl r={7} l={13} seg={32} m={M.white} position={[0, 6.5, 0]} />
+            <Cyl r={7.1} r2={1} l={1.6} seg={32} m={M.greyLight} position={[0, 13.8, 0]} />
+          </group>
+        )),
+      )}
+      <Building pos={[112, 0, 158]} size={[10, 4, 7]} color="#d6d0c4" win={win} rows={1} />
+      <Text position={[127, 16, 171]} fontSize={1.3} color="#ffffff">
+        BULKING STATION CPO
+      </Text>
+      {/* jetty and pipe to it */}
+      <Box s={[14, 0.8, 6]} m={M.cast} position={[158, 1, 190]} />
+      <Box s={[20, 0.5, 0.5]} m={M.steel} position={[149, 1.8, 189]} />
+      <Cyl r={0.3} l={6} m={M.steel} position={[164, 4, 190]} />
+      <group ref={ship} visible={false}>
+        <group position={[172, 0, 190]}>
+          <Box s={[10, 4, 52]} m={M.red} position={[0, 1.2, 0]} />
+          <Box s={[10.2, 1.2, 52.2]} m={M.black} position={[0, -0.4, 0]} />
+          <Box s={[8, 6, 7]} m={M.white} position={[0, 6, -20]} />
+          <Cyl r={0.7} l={4} m={M.black} position={[0, 11, -21]} />
+          {[-10, 0, 10].map((z) => (
+            <Box key={z} s={[6, 0.6, 6]} m={M.greyLight} position={[0, 3.5, z]} />
+          ))}
+        </group>
+      </group>
     </group>
   );
 }

@@ -275,7 +275,22 @@
   font-size: 11.5px;
   margin: 8px 0 0;
 }
+.p-goal {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #ffffff0d;
+}
+.p-goal.ok {
+  background: #2fb36b33;
+}
+.p-goal.bad {
+  background: #e0533c33;
+}
 .p-feed {
+  max-height: calc(100vh - 430px);
   top: 372px;
   right: 16px;
   width: 340px;

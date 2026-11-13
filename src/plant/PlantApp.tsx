@@ -19,8 +19,13 @@ import {
   drainDayTank,
   fillDayTank,
   LIMIT_KW as UNIT_MAX_KW,
+  motorStart,
   resetUnit,
+  SCENARIOS,
   setEStop,
+  shipArrives,
+  startScenario,
+  type ScenarioId,
   setFeeder,
   setSync,
   startUnit,
@@ -201,6 +206,7 @@ function Units() {
           </button>
         ))}
       </div>
+      <Scenario />
       <div className="p-stats">
         <span>Energi {mw(plant.stats.kwh)} MWh</span>
         <span>Solar {Math.round(plant.stats.litres).toLocaleString('id')} L</span>
@@ -210,6 +216,62 @@ function Units() {
         </span>
       </div>
     </aside>
+  );
+}
+
+/** Challenges, and the knobs that push the load: mill throughput, a whole-complex multiplier, motor starts, ships. */
+function Scenario() {
+  usePlant((s) => s.tick);
+  const g = plant.goal;
+  const elapsed = g ? Math.min(24, ((plant.day - 1) * 1440 + plant.clock - g.start) / 60) : 0;
+  return (
+    <>
+      <h2>Skenario</h2>
+      <div className="row wrap">
+        {(Object.keys(SCENARIOS) as ScenarioId[]).map((id) => (
+          <button
+            key={id}
+            className={`small ${(g?.id ?? 'bebas') === id ? 'on' : ''}`}
+            title={SCENARIOS[id].brief}
+            onClick={() => {
+              startScenario(plant, id);
+              usePlant.getState().bump();
+            }}
+          >
+            {SCENARIOS[id].name}
+          </button>
+        ))}
+      </div>
+      {g && (
+        <p className={`p-goal ${g.done ? (g.passed ? 'ok' : 'bad') : ''}`}>
+          {g.done ? g.result : `${SCENARIOS[g.id].brief} Berjalan ${elapsed.toFixed(1)} / 24 jam · lepas beban ${plant.stats.shed}× · padam ${g.blackouts}×`}
+        </p>
+      )}
+      <h2>Beban kawasan</h2>
+      <label className="p-slider">
+        <span>
+          Kapasitas PKS <b>{plant.tph} t/jam</b> ({Math.round(300 + 18 * plant.tph)} kW saat olah penuh)
+        </span>
+        <input type="range" min={30} max={90} step={5} value={plant.tph} onChange={(e) => (plant.tph = +e.target.value)} />
+      </label>
+      <label className="chk wide">
+        <input type="checkbox" checked={plant.pksAllDay} onChange={() => (plant.pksAllDay = !plant.pksAllDay)} /> PKS jalan dua shift penuh (24 jam)
+      </label>
+      <label className="p-slider">
+        <span>
+          Pengali beban seluruh kawasan <b>{Math.round(plant.loadMul * 100)}%</b>
+        </span>
+        <input type="range" min={0.5} max={1.5} step={0.05} value={plant.loadMul} onChange={(e) => (plant.loadMul = +e.target.value)} />
+      </label>
+      <div className="row">
+        <button className="small" disabled={!busLive(plant)} onClick={() => motorStart(plant)}>
+          ⚙ Start motor besar
+        </button>
+        <button className="small" disabled={plant.shipMin > 0} onClick={() => shipArrives(plant)}>
+          {plant.shipMin > 0 ? `🚢 Muat kapal ${Math.ceil(plant.shipMin / 60)} jam` : '🚢 Kapal sandar'}
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -541,7 +603,14 @@ function Feeders() {
           </div>
         );
       })}
-      <small className="hint">Urutan lepas otomatis saat frekuensi drop: Kantor → Kernel → PKS → Air & klinik → Perumahan.</small>
+      <small className="hint">
+        Urutan lepas otomatis saat frekuensi drop:{' '}
+        {[...plant.feeders]
+          .sort((a, b) => a.shedOrder - b.shedOrder)
+          .map((f) => f.short)
+          .join(' → ')}
+        .
+      </small>
     </section>
   );
 }
@@ -584,7 +653,7 @@ function Chart() {
         g.setLineDash([4, 4]);
         g.beginPath();
         for (let hh = 0; hh <= 24; hh += 0.25) {
-          const v = [0, 1, 2, 3, 4].reduce((a, f) => a + profile(f, hh), 0);
+          const v = plant.feeders.reduce((a, f) => a + profile(f.id, hh, plant.tph, plant.pksAllDay), 0) * plant.loadMul;
           if (hh === 0) g.moveTo(x(hh), y(v));
           else g.lineTo(x(hh), y(v));
         }
