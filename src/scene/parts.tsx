@@ -22,6 +22,9 @@ export const M = {
   copper: new THREE.MeshStandardMaterial({ color: '#b87333', metalness: 0.9, roughness: 0.35 }),
   canopy: new THREE.MeshStandardMaterial({ color: '#21aeb0', metalness: 0.3, roughness: 0.45 }),
   canopyDark: new THREE.MeshStandardMaterial({ color: '#4a5056', metalness: 0.3, roughness: 0.55 }),
+  blue: new THREE.MeshStandardMaterial({ color: '#2f5f8f', metalness: 0.4, roughness: 0.5 }),
+  greyLight: new THREE.MeshStandardMaterial({ color: '#b8bdc1', metalness: 0.35, roughness: 0.55 }),
+  chrome: new THREE.MeshStandardMaterial({ color: '#d7dadc', metalness: 1, roughness: 0.15 }),
 };
 
 type V3 = [number, number, number];

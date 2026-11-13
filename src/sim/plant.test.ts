@@ -1,0 +1,92 @@
+import { describe, expect, it } from 'vitest';
+import { busLive, closeBreaker, create, loadKw, online, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
+
+const run = (p: Plant, s: number, dt = 0.02) => {
+  for (let t = 0; t < s; t += dt) step(p, dt);
+};
+const warm = (p: Plant, i: number) => {
+  startUnit(p, i);
+  run(p, 12);
+};
+
+describe('black start and synchronising', () => {
+  it('closes the first set onto a dead bus and picks up feeders', () => {
+    const p = create();
+    p.clock = 10 * 60;
+    warm(p, 0);
+    closeBreaker(p, 0);
+    expect(busLive(p)).toBe(true);
+    setFeeder(p, 1, true);
+    run(p, 5);
+    expect(p.busHz).toBeCloseTo(50, 0);
+    expect(loadKw(p)).toBeGreaterThan(800);
+  });
+
+  it('accepts a set only inside the synchronising window', () => {
+    const p = create();
+    warm(p, 0);
+    closeBreaker(p, 0);
+    warm(p, 1);
+    // slip the incoming set slightly fast and wait for the pointer to come round to 12 o'clock
+    trim(p, 1, 0.1, 0);
+    let closed = false;
+    for (let t = 0; t < 30 && !closed; t += 0.02) {
+      step(p, 0.02);
+      const d = syncDiff(p, p.units[1]);
+      if (Math.abs(d.deg) < 5 && Math.abs(d.hz) < 0.2) {
+        closeBreaker(p, 1);
+        closed = p.units[1].breaker;
+      }
+    }
+    expect(closed).toBe(true);
+    expect(p.stats.badSync).toBe(0);
+  });
+
+  it('trips a set closed out of phase', () => {
+    const p = create();
+    warm(p, 0);
+    closeBreaker(p, 0);
+    warm(p, 1);
+    p.units[1].angle = Math.PI / 2; // 90° out
+    closeBreaker(p, 1);
+    expect(p.units[1].breaker).toBe(false);
+    expect(p.stats.badSync).toBe(1);
+    expect(p.units[1].alarm).not.toBeNull();
+  });
+});
+
+describe('load', () => {
+  it('shares the load equally and sheds a feeder when one set has to carry everything', () => {
+    const p = create();
+    p.clock = 19.5 * 60; // evening peak
+    p.timeScale = 0;
+    for (const i of [0, 1, 2]) warm(p, i);
+    closeBreaker(p, 0);
+    for (const i of [1, 2]) {
+      p.units[i].angle = 0;
+      p.units[i].hz = p.busHz;
+      p.units[i].volts = p.busV;
+      closeBreaker(p, i);
+    }
+    for (let f = 0; f < 5; f++) setFeeder(p, f, true);
+    run(p, 6);
+    const kws = online(p).map((u) => u.kw);
+    expect(Math.max(...kws) - Math.min(...kws)).toBeLessThan(1);
+    // lose two sets: one 2000 kW set cannot hold ~4 MW, under-frequency shedding kicks in
+    p.units[1].breaker = false;
+    p.units[2].breaker = false;
+    run(p, 6);
+    expect(p.stats.shed).toBeGreaterThan(0);
+  });
+
+  it('the load-demand master runs the plant through a day without a blackout', () => {
+    const p = create();
+    p.master = true;
+    p.timeScale = 6; // a day in four minutes
+    run(p, 240, 0.05);
+    expect(p.day).toBe(2);
+    expect(p.stats.kwh).toBeGreaterThan(50000);
+    expect(p.events.filter((e) => e === 'blackout').length).toBe(0);
+    expect(p.stats.litres / p.stats.kwh).toBeLessThan(0.33);
+  });
+});

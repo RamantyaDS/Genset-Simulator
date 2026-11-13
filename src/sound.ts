@@ -119,36 +119,58 @@ export function setSound(on: boolean) {
   if (ctx) master.gain.setTargetAtTime(on ? 0.9 : 0, ctx.currentTime, 0.05);
 }
 
+/** What the engine sound follows. The single-genset mode uses `sim`; the power plant mode installs its own. */
+export interface SoundSource {
+  rpm: number;
+  firing: boolean;
+  starter: boolean;
+  coolant: number;
+  lf: number;
+  count: number; // engines running (louder with more)
+  alarm: boolean;
+}
+export const soundSource: { override: null | (() => SoundSource) } = { override: null };
+const fromSim = (): SoundSource => ({
+  rpm: sim.rpm,
+  firing: sim.firing,
+  starter: sim.starter,
+  coolant: sim.coolant,
+  lf: sim.firing ? Math.min(1.25, loadFrac(sim)) : 0,
+  count: sim.firing ? 1 : 0,
+  alarm: ui.buzzer && sim.alarms.length > 0,
+});
+
 /** Per-frame update. `distance` is camera-to-genset in metres; `enclosed` when the silent canopy is closed. */
 export function updateSound(distance: number, enclosed: boolean) {
   if (!ctx || !n) return;
+  const src = soundSource.override ? soundSource.override() : fromSim();
   const t = ctx.currentTime;
-  const r = sim.rpm;
-  const lf = sim.firing ? Math.min(1.25, loadFrac(sim)) : 0;
+  const r = src.rpm;
+  const lf = src.lf;
   const k = (v: AudioParam, x: number, tc = 0.03) => v.setTargetAtTime(x, t, tc);
 
   // Closer is louder; the canopy's insulation takes most of the highs and some level.
   const near = Math.min(1, 8 / Math.max(3, distance));
   k(muffle.frequency, enclosed ? 650 : 16000, 0.2);
-  k(n.bus.gain, near * (enclosed ? 0.5 : 1), 0.1);
+  k(n.bus.gain, near * (enclosed ? 0.5 : 1) * (1 + 0.22 * Math.max(0, src.count - 1)), 0.1);
 
   if (engine) {
     const p = engine.parameters;
     k(p.get('rpm')!, r, 0.02);
     k(p.get('load')!, lf, 0.25);
-    p.get('firing')!.setValueAtTime(sim.firing ? 1 : 0, t);
-    p.get('starter')!.setValueAtTime(sim.starter ? 1 : 0, t);
-    k(p.get('cold')!, Math.max(0, Math.min(1, (70 - sim.coolant) / 30)), 1);
+    p.get('firing')!.setValueAtTime(src.firing ? 1 : 0, t);
+    p.get('starter')!.setValueAtTime(src.starter ? 1 : 0, t);
+    k(p.get('cold')!, Math.max(0, Math.min(1, (70 - src.coolant) / 30)), 1);
   }
 
   const spin = Math.min(1, r / 1500);
   const boost = spin * (0.3 + 0.7 * Math.min(1, lf));
   k(n.turbo.frequency, 1800 + 5200 * boost, 0.6);
   k(n.turbo2.frequency, 2700 + 7400 * boost, 0.6);
-  k(n.turboG.gain, (sim.firing ? 1 : 0) * spin * (0.002 + 0.01 * lf), 0.5);
+  k(n.turboG.gain, (src.firing ? 1 : 0) * spin * (0.002 + 0.01 * lf), 0.5);
   k(n.fanG.gain, 0.22 * spin * spin, 0.3);
 
-  const buzzing = ui.buzzer && sim.alarms.length > 0;
+  const buzzing = src.alarm;
   n.buzzG.gain.setTargetAtTime(buzzing && Math.floor(t * 2) % 2 === 0 ? 0.03 : 0, t, 0.005);
 }
 
@@ -189,6 +211,31 @@ function oneShot(kind: 'beep' | 'clunk' | 'engage' | 'release') {
   o.connect(og).connect(master);
   o.start(t);
   o.stop(t + 0.2);
+}
+
+/** Power plant events: breakers, an out-of-phase closing, trips, starts. */
+export function playPlantEvent(e: string) {
+  if (e === 'breaker' || e === 'feeder' || e === 'shed') oneShot('clunk');
+  else if (e === 'start') oneShot('engage');
+  else if (e === 'trip') oneShot('clunk');
+  else if (e === 'badSync') {
+    // the bang of closing out of phase: breaker slam plus a heavy thump through the floor
+    oneShot('clunk');
+    if (ctx) {
+      const c = ctx;
+      const t0 = c.currentTime;
+      const o = c.createOscillator();
+      o.frequency.setValueAtTime(70, t0);
+      o.frequency.exponentialRampToValueAtTime(25, t0 + 0.6);
+      const g = c.createGain();
+      g.gain.setValueAtTime(1.2, t0);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.7);
+      o.connect(g).connect(master);
+      o.start(t0);
+      o.stop(t0 + 0.75);
+    }
+    setTimeout(() => oneShot('clunk'), 120);
+  }
 }
 
 export function playEvent(e: SimEvent) {

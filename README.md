@@ -33,6 +33,21 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 - Asap knalpot seperti diesel asli: uap putih saat starter, kepulan hitam saat mesin menyala, kabut putih kebiruan saat mesin masih dingin, jelaga hitam saat beban naik mendadak (turbo lag), hampir bening saat jalan normal, dan abu-abu gelap saat overload
 - Narasi bahasa Indonesia yang menjelaskan apa yang sedang terjadi di setiap tahap
 
+## Mode pembangkit 5 unit
+
+Tombol "Mode pembangkit 5 unit" (atau `?mode=plant`) membuka PLTD kecil: lima genset 2250 kVA berjajar di dalam hall, memasok kawasan pabrik kelapa sawit lewat jaringan 20 kV.
+
+- Kawasan yang dilayani: PKS 60 t/jam, pabrik inti (kernel), perumahan, sekolah dan masjid, kantor dan bengkel, air bersih dan klinik. Beban tiap feeder mengikuti jam (puncak sekitar 4 MW pada malam hari)
+- Black start: genset pertama boleh menutup breaker ke bus yang masih mati (dead bus)
+- Sinkronisasi manual dengan sinkroskop: atur frekuensi dan tegangan, lalu tutup breaker saat jarum mendekati jam 12 (selisih di bawah 0,2 Hz, 4% tegangan, dan 15°). Menutup di luar fase membuat genset trip
+- Pembagian beban kW merata antar unit (isochronous load sharing); frekuensi bus turun bila beban melebihi kapasitas
+- Pelepasan beban otomatis (UFLS) pada 48,5 Hz menurut urutan prioritas feeder; di bawah 47 Hz seluruh pembangkit padam
+- Kontrol otomatis (load demand): menyalakan unit berikutnya saat beban di atas 80% kapasitas dan mematikan unit saat beban cukup ditanggung unit yang tersisa
+- Jam dipercepat (1, 5, atau 20 menit simulasi per detik) untuk melihat profil beban sehari, konsumsi solar, efisiensi L/kWh, dan pengisian tangki lewat truk
+- Siang dan malam, lampu rumah dan pabrik hanya menyala bila feeder-nya bertegangan, ruang kontrol dengan layar SCADA, gangguan acak untuk latihan
+
+Catatan: pada instalasi nyata, paralel genset memakai pengendali seperti DSE8610 MKII (DSE7320 tidak bisa paralel). Profil beban kawasan adalah perkiraan, bukan data pabrik tertentu.
+
 ## Catatan akurasi
 
 Spesifikasi diambil dari halaman produk Traknus, datasheet mesin dan genset 4016-61TRG3, datasheet Stamford P734H, serta manual operator DSE7320 MKII. Ada beberapa penyederhanaan:

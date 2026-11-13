@@ -251,6 +251,17 @@ export function App() {
             ▶ Cara kerja genset
           </button>
         )}
+        {tour === null && (
+          <button
+            className="tour-start plant-start"
+            onClick={() => {
+              initSound();
+              useUI.getState().set({ mode: 'plant' });
+            }}
+          >
+            ⚡ Mode pembangkit 5 unit
+          </button>
+        )}
       </header>
       <Gauges />
       {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}

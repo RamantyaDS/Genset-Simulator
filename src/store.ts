@@ -15,6 +15,7 @@ interface UI {
   panelOpen: boolean;
   focus: string | null; // part the info card describes
   tour: number | null; // open chapter of the guided tour
+  mode: 'single' | 'plant'; // one genset, or the five-unit power plant
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
 }
@@ -28,6 +29,7 @@ export const useUI = createStore<UI>((setState) => ({
   panelOpen: true,
   focus: null,
   tour: null,
+  mode: new URLSearchParams(location.search).get('mode') === 'plant' ? 'plant' : 'single',
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),
 }));
