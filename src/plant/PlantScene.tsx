@@ -7,29 +7,32 @@
 import { CameraControls, Line, Sky, Text } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
-import { useEffect, useMemo, useRef, type ElementRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { FocusHighlight } from '../scene/FocusHighlight';
+import { HeatHaze, type HazeSources } from '../scene/HeatHaze';
 import { Box, Cyl, M } from '../scene/parts';
+import { useUI } from '../store';
 import { busLive, hourOf, PRIME_KW } from '../sim/plant';
 import { playPlantEvent, soundSource, updateSound } from '../sound';
-import { GensetLite } from './GensetLite';
-import { advancePlant, HALL, onPlantEvent, plant, usePlant, UNIT_X, type PlantCam } from './store';
+import { GensetUnit, unitState } from './GensetUnit';
+import { cams, goPlant, unitWorld } from './camera';
+import { advancePlant, HALL, onPlantEvent, plant, usePlant, UNIT_X } from './store';
 
 // Each set sits at z −4 turned so its radiator faces the back wall; its exhaust outlet ends up at z ≈ −3.3.
 const STACK_Z = -3.26;
 
-export const cams = { current: null as ElementRef<typeof CameraControls> | null };
-const VIEWS: Record<PlantCam, [number[], number[]]> = {
-  hall: [[16, 24, 34], [0, 2, 0]],
-  inside: [[-25, 3.2, 6.5], [6, 2, -1]],
-  control: [[24, 3.4, 4], [33, 2.2, 0]],
-  site: [[-60, 45, 70], [0, 0, 10]],
-  complex: [[-40, 70, 60], [5, 0, 175]],
-};
-export const goPlant = (c: PlantCam) => {
-  const [p, t] = VIEWS[c];
-  cams.current?.setLookAt(p[0], p[1], p[2], t[0], t[1], t[2], true);
-};
+
+
+/** Shimmer above the selected set's stack outlet and behind its radiator. */
+function UnitHaze() {
+  const selected = usePlant((s) => s.selected);
+  const haze: HazeSources = {
+    exhaust: { from: [UNIT_X[selected], HALL.h + 4.2, STACK_Z], to: [UNIT_X[selected] + 0.9, HALL.h + 7.4, STACK_Z], width: 0.45 },
+    radiator: { from: unitWorld(selected, [-2.9, 1.4, 0]), to: unitWorld(selected, [-4.1, 2.3, 0]), width: 0.95 },
+  };
+  return <HeatHaze sources={haze} source={() => unitState[selected]} />;
+}
 
 /** 0 at night, 1 at noon: drives the sun, sky and whether windows/street lights matter. */
 const daylight = () => Math.max(0, Math.sin(((hourOf(plant) - 6) / 12) * Math.PI));
@@ -601,19 +604,20 @@ function Intro() {
 
 export function PlantScene() {
   return (
-    <Canvas shadows dpr={[1, 1.75]} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
+    <Canvas shadows dpr={[1, 1.75]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
       <fog attach="fog" args={['#bcd4e6', 120, 420]} />
       <DayNight />
       <Grounds />
       <Hall />
       {UNIT_X.map((x, i) => (
         <group key={x} position={[x, 0, -4]} rotation={[0, -Math.PI / 2, 0]}>
-          <GensetLite index={i} />
+          <GensetUnit index={i} />
           <Text position={[0, 3.6, 0]} rotation={[0, Math.PI / 2, 0]} fontSize={0.7} color="#1d3a5c">
             {`G${i + 1}`}
           </Text>
         </group>
       ))}
+      <FocusHighlight />
       <Stacks />
       <ControlRoom />
       <Yard />
@@ -623,6 +627,7 @@ export function PlantScene() {
       <Intro />
       <Driver />
       <EffectComposer>
+        <UnitHaze />
         <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
       </EffectComposer>
     </Canvas>

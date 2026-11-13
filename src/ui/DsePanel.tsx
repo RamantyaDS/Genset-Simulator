@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { BUTTONS, drawModule, H, press, W } from '../dse';
+import { BUTTONS, drawModule, H, press, W, type ButtonId } from '../dse';
+import type { State } from '../sim/genset';
 import { explain } from '../explain';
 import { sim, useUI } from '../store';
 
-export function DsePanel() {
+/** The DSE7320 face, full size. Drives the single set by default; the plant passes one set's state, its own button
+ *  handling and its own explanation line. */
+export function DsePanel({ s = sim, onPress, note }: { s?: State; onPress?: (id: ButtonId) => void; note?: string } = {}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState('');
   useUI((s) => s.tick);
@@ -12,12 +15,12 @@ export function DsePanel() {
     let id = 0;
     const draw = () => {
       const c = canvas.current;
-      if (c) drawModule(c.getContext('2d')!, sim);
+      if (c) drawModule(c.getContext('2d')!, s);
       id = requestAnimationFrame(draw);
     };
     draw();
     return () => cancelAnimationFrame(id);
-  }, []);
+  }, [s]);
 
   const hit = (e: React.PointerEvent) => {
     const r = canvas.current!.getBoundingClientRect();
@@ -43,11 +46,11 @@ export function DsePanel() {
         onPointerLeave={() => setHover('')}
         onPointerDown={(e) => {
           const b = hit(e);
-          if (b) press(sim, b.id);
+          if (b) (onPress ?? ((id) => press(sim, id)))(b.id);
         }}
       />
       <p className="dse-tip">{hover || 'Klik tombol di panel. ◀ ▶ untuk ganti halaman layar, ▲ ▼ untuk menggulir.'}</p>
-      <p className="explain">{explain(sim)}</p>
+      <p className="explain">{note ?? explain(s)}</p>
     </section>
   );
 }

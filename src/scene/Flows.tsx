@@ -1,13 +1,9 @@
 // X-ray view: the five things moving through a running genset, drawn as flowing lines in genset coordinates.
-import { useUI, sim } from '../store';
 import { loadFrac } from '../sim/genset';
 import { Flow } from './Site';
+import { useGenset } from './source';
 
 type P = [number, number, number];
-const xray = () => useUI.getState().xray;
-const running = () => xray() && sim.rpm > 100;
-const rpmSpeed = () => 0.4 + (sim.rpm / 1500) * 1.6;
-const loadSpeed = () => 0.4 + (sim.rpm / 1500) * (0.8 + loadFrac(sim) * 1.6);
 
 export const FLOW_COLORS = {
   fuel: '#ff9a2e',
@@ -18,6 +14,11 @@ export const FLOW_COLORS = {
 };
 
 export function Flows() {
+  const { s: sim, view } = useGenset();
+  const xray = () => view().xray;
+  const running = () => xray() && sim.rpm > 100;
+  const rpmSpeed = () => 0.4 + (sim.rpm / 1500) * 1.6;
+  const loadSpeed = () => 0.4 + (sim.rpm / 1500) * (0.8 + loadFrac(sim) * 1.6);
   const fuel: P[] = [[-1.2, 0.5, 2.3], [-0.9, 0.55, 1.4], [-0.75, 0.95, 0.7], [-0.6, 1.35, 0.5], [-1.6, 2.0, 0.45], [0.5, 2.0, 0.45]];
   const fuelB: P[] = [[-0.6, 1.35, 0.5], [-0.6, 1.9, -0.2], [-1.6, 2.0, -0.45], [0.5, 2.0, -0.45]];
   const air = (s: 1 | -1): P[] => [[1.3, 2.36, s * 0.34], [0.85, 2.2, s * 0.38], [0.74, 2.12, s * 0.64], [0.2, 2.0, s * 0.15], [-0.7, 1.95, 0], [-1.5, 1.85, s * 0.2], [-1.6, 1.9, s * 0.35]];

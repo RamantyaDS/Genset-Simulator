@@ -4,7 +4,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Effect } from 'postprocessing';
 import { forwardRef, useMemo } from 'react';
 import * as THREE from 'three';
-import { sim } from '../store';
+import type { State } from '../sim/genset';
+import { sim as globalSim } from '../store';
 
 const frag = /* glsl */ `
   uniform vec2 a0; uniform vec2 b0; uniform float w0; uniform float s0;
@@ -60,7 +61,10 @@ export interface HazeSources {
   radiator: { from: V3; to: V3; width: number };
 }
 
-export const HeatHaze = forwardRef<HeatHazeEffect, { sources: HazeSources }>(function HeatHaze({ sources }, ref) {
+export const HeatHaze = forwardRef<HeatHazeEffect, { sources: HazeSources; source?: () => State }>(function HeatHaze(
+  { sources, source = () => globalSim },
+  ref,
+) {
   const effect = useMemo(() => new HeatHazeEffect(), []);
   const camera = useThree((s) => s.camera);
   const v = useMemo(() => new THREE.Vector3(), []);
@@ -80,6 +84,7 @@ export const HeatHaze = forwardRef<HeatHazeEffect, { sources: HazeSources }>(fun
       const b = v.set(p[0] + right.x, p[1] + right.y, p[2] + right.z).project(camera);
       return Math.abs(b.x - a.x) * 0.5 * (size.width / size.height);
     };
+    const sim = source();
     const ex = sources.exhaust;
     const rd = sources.radiator;
     const okEx = toUv(ex.from, U.get('a0')!.value) && toUv(ex.to, U.get('b0')!.value);

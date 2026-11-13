@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { busLive, closeBreaker, create, loadKw, online, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
+import { busLive, closeBreaker, create, loadKw, online, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
 
 const run = (p: Plant, s: number, dt = 0.02) => {
   for (let t = 0; t < s; t += dt) step(p, dt);
@@ -88,5 +88,21 @@ describe('load', () => {
     expect(p.stats.kwh).toBeGreaterThan(50000);
     expect(p.events.filter((e) => e === 'blackout').length).toBe(0);
     expect(p.stats.litres / p.stats.kwh).toBeLessThan(0.33);
+  });
+});
+
+describe('faults on one set', () => {
+  it('a blocked radiator, an oil leak and the E-stop each shut the set down, as on the single set', () => {
+    const p = create();
+    for (const i of [0, 1, 2]) warm(p, i);
+    p.units[0].faultRadiator = true;
+    p.units[1].faultOil = true;
+    setEStop(p, 2, true);
+    run(p, 120);
+    expect(p.units[0].alarm).toBe('Suhu air pendingin tinggi');
+    expect(p.units[1].alarm).toBe('Tekanan oli rendah');
+    expect(p.units[2].alarm).toBe('Emergency stop');
+    startUnit(p, 2);
+    expect(p.units[2].phase).toBe('rest'); // latched until released
   });
 });

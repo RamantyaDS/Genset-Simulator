@@ -8,6 +8,7 @@ export type PlantCam = 'hall' | 'inside' | 'control' | 'site' | 'complex';
 interface PlantUI {
   tick: number;
   selected: number;
+  inspect: boolean; // close-up of the selected set with the single-set tools
   cam: PlantCam;
   toast: string;
   toastUntil: number;
@@ -18,6 +19,7 @@ interface PlantUI {
 export const usePlant = createStore<PlantUI>((set) => ({
   tick: 0,
   selected: 0,
+  inspect: false,
   cam: 'hall',
   toast: '',
   toastUntil: 0,

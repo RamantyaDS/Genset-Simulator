@@ -16,6 +16,7 @@ import {
   PRIME_KW,
   profile,
   resetUnit,
+  setEStop,
   setFeeder,
   setSync,
   startUnit,
@@ -29,7 +30,14 @@ import {
   type Plant,
 } from '../sim/plant';
 import { useUI } from '../store';
-import { goPlant, PlantScene } from './PlantScene';
+import { press, type ButtonId } from '../dse';
+import { FLOW_COLORS } from '../scene/Flows';
+import { amps, fuelRate, hz as setHz } from '../sim/genset';
+import { DsePanel } from '../ui/DsePanel';
+import { PartCard } from '../ui/PartCard';
+import { unitState } from './GensetUnit';
+import { goPlant, goUnit, inspectUnit, leaveInspect, type UnitView } from './camera';
+import { PlantScene } from './PlantScene';
 import { plant, usePlant, type PlantCam } from './store';
 
 const clock = (p: Plant) => {
@@ -145,6 +153,9 @@ function Units() {
                   Tutup CB
                 </button>
               )}
+              <button className="small icon" title="Dekati genset ini: bongkar, X-ray, panel DSE, gangguan" onClick={(e) => (e.stopPropagation(), inspectUnit(i))}>
+                🔍
+              </button>
               {u.alarm ? (
                 <button className="small" onClick={(e) => (e.stopPropagation(), resetUnit(plant, i))}>
                   Reset
@@ -252,6 +263,143 @@ function Synchroscope() {
     return () => cancelAnimationFrame(id);
   }, []);
   return <canvas ref={ref} width={170} height={170} className="p-scope" aria-label="Synchroscope" />;
+}
+
+/** DSE buttons on one paralleled set: the mode keys pick manual/auto for the load-demand master, start and stop act
+ *  on the set, the breaker keys close (with check-sync) or open its breaker, the rest only move the screen. */
+function unitPress(i: number, id: ButtonId) {
+  const u = plant.units[i];
+  switch (id) {
+    case 'stop':
+      u.auto = false;
+      if (u.phase === 'rest') resetUnit(plant, i);
+      else stopUnit(plant, i);
+      break;
+    case 'manual':
+    case 'test':
+      u.auto = false;
+      break;
+    case 'auto':
+      u.auto = true;
+      break;
+    case 'start':
+      if (!u.auto) startUnit(plant, i);
+      break;
+    case 'toGen':
+      closeBreaker(plant, i);
+      break;
+    case 'toMains':
+      openBreaker(plant, i);
+      break;
+  }
+  const screenOnly = ['up', 'down', 'left', 'right', 'tick', 'mute'].includes(id);
+  press(unitState[i], screenOnly ? id : 'mute');
+}
+
+const UNIT_VIEWS: [UnitView, string][] = [
+  ['genset', 'Genset'],
+  ['panel', 'Panel'],
+  ['engine', 'Mesin'],
+  ['radiator', 'Radiator'],
+];
+
+/** Everything the single-set page offers, for the set being inspected. */
+function UnitDetail() {
+  const { selected: i } = usePlant();
+  usePlant((s) => s.tick);
+  const ui = useUI();
+  const u = plant.units[i];
+  const s = unitState[i];
+  const [cls, text] = unitStatus(i);
+  const g: [string, string, string?][] = [
+    ['Beban', `${Math.round(u.kw)} kW`, u.kw ? `${Math.round((u.kw / PRIME_KW) * 100)}%` : undefined],
+    ['Putaran', `${Math.round(u.rpm)} rpm`],
+    ['Frekuensi', `${setHz(s).toFixed(1)} Hz`],
+    ['Tegangan', `${Math.round(u.volts)} V`],
+    ['Arus', `${Math.round(amps(s))} A`],
+    ['Solar', `${Math.round(fuelRate(s))} L/jam`],
+    ['Air pendingin', `${Math.round(u.coolant)} °C`],
+    ['Oli', `${u.oil.toFixed(1)} bar`],
+    ['Gas buang', `${Math.round(u.exhaust)} °C`],
+  ];
+  if (ui.panelOpen)
+    return <DsePanel s={s} onPress={(id) => unitPress(i, id)} note={`G${i + 1}: ${text}. Mode ${u.auto ? 'AUTO, diatur kontrol otomatis' : 'MANUAL'}.`} />;
+  return (
+    <section className="p-panel p-detail">
+      <div className="p-detail-head">
+        <h2>
+          Genset G{i + 1} <i className={`dot ${cls}`} /> <span>{text}</span>
+        </h2>
+        <button className="small" onClick={leaveInspect}>
+          ← Kembali
+        </button>
+      </div>
+      <div className="row">
+        {plant.units.map((_, k) => (
+          <button key={k} className={`small ${k === i ? 'on' : ''}`} onClick={() => inspectUnit(k)}>
+            G{k + 1}
+          </button>
+        ))}
+      </div>
+      <div className="p-gauges">
+        {g.map(([k, v, sub]) => (
+          <div key={k}>
+            <span>{k}</span>
+            <b>{v}</b>
+            {sub && <small>{sub}</small>}
+          </div>
+        ))}
+      </div>
+      <h2>Gangguan</h2>
+      <div className="row">
+        <button className={u.eStop ? 'small on danger' : 'small'} onClick={() => setEStop(plant, i, !u.eStop)}>
+          {u.eStop ? 'Lepas E-stop' : '🛑 Emergency stop'}
+        </button>
+        <button className={u.faultRadiator ? 'small on danger' : 'small'} onClick={() => (u.faultRadiator = !u.faultRadiator)}>
+          Radiator tersumbat
+        </button>
+        <button className={u.faultOil ? 'small on danger' : 'small'} onClick={() => (u.faultOil = !u.faultOil)}>
+          Oli bocor
+        </button>
+      </div>
+      <h2>Tampilan</h2>
+      <div className="row">
+        <button className={`small ${ui.xray ? 'on' : ''}`} onClick={() => ui.set({ xray: !ui.xray })}>
+          X-ray aliran
+        </button>
+        <button
+          className={`small ${ui.explode ? 'on' : ''}`}
+          onClick={() => {
+            const next = ui.explode === 0 ? 1 : ui.explode === 1 ? 2 : 0;
+            ui.set({ explode: next, focus: null });
+            goUnit(i, next ? 'exploded' : 'genset');
+          }}
+        >
+          {ui.explode === 0 ? 'Bongkar' : ui.explode === 1 ? 'Bongkar detail' : 'Rakit lagi'}
+        </button>
+        <button className="small" onClick={() => ui.set({ panelOpen: true })}>
+          Panel DSE
+        </button>
+      </div>
+      <div className="row">
+        {UNIT_VIEWS.map(([v, l]) => (
+          <button key={v} className="small" onClick={() => goUnit(i, v)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {ui.xray && (
+        <ul className="legend">
+          <li style={{ color: FLOW_COLORS.fuel }}>Solar</li>
+          <li style={{ color: FLOW_COLORS.air }}>Udara masuk (turbo)</li>
+          <li style={{ color: FLOW_COLORS.exhaust }}>Gas buang</li>
+          <li style={{ color: FLOW_COLORS.coolant }}>Air pendingin</li>
+          <li style={{ color: FLOW_COLORS.power }}>Listrik</li>
+        </ul>
+      )}
+      <p className="hint">Klik komponen mana saja pada genset ini untuk melihat nama dan fungsinya.</p>
+    </section>
+  );
 }
 
 function SyncPanel() {
@@ -447,6 +595,7 @@ const CAMS: [PlantCam, string][] = [
 let introSeen = false;
 
 export function PlantApp() {
+  const inspect = usePlant((s) => s.inspect);
   const [intro, setIntro] = useState(!introSeen);
   useEffect(() => {
     document.body.classList.add('plant-mode');
@@ -469,10 +618,19 @@ export function PlantApp() {
       </header>
       <TopBar />
       <Units />
-      <SyncPanel />
-      <Feeders />
-      <Chart />
-      <Narration />
+      {inspect ? (
+        <>
+          <UnitDetail />
+          <PartCard />
+        </>
+      ) : (
+        <>
+          <SyncPanel />
+          <Feeders />
+          <Chart />
+          <Narration />
+        </>
+      )}
       {intro && (
         <div className="intro">
           <div>
@@ -501,7 +659,7 @@ export function PlantApp() {
       )}
       <div className="p-cams">
         {CAMS.map(([c, l]) => (
-          <button key={c} className="small" onClick={() => goPlant(c)}>
+          <button key={c} className="small" onClick={() => (leaveInspect(), goPlant(c))}>
             {l}
           </button>
         ))}

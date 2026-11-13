@@ -5,7 +5,8 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
-import { sim, useUI } from '../store';
+import { useUI } from '../store';
+import { useGenset } from './source';
 import { ControlPanel } from './ControlPanel';
 import { BoltRing, Box, Cyl, M, Pipe, useCanvasTexture } from './parts';
 
@@ -18,11 +19,12 @@ export const focused: { obj: THREE.Object3D | null } = { obj: null };
 
 /** A named component: clickable, and moved by `o1` (assemblies apart) and additionally `o2` (every part apart). */
 function Part({ id, o1 = Z, o2 = Z, children, position }: { id: string; o1?: V3; o2?: V3; children: ReactNode; position?: V3 }) {
+  const src = useGenset();
   const ref = useRef<THREE.Group>(null);
   const base = useMemo(() => new THREE.Vector3(...(position ?? Z)), [position]);
   const target = useMemo(() => new THREE.Vector3(), []);
   useFrame((_, dt) => {
-    const lv = useUI.getState().explode;
+    const lv = src.view().explode;
     target.copy(base);
     if (lv >= 1) target.set(target.x + o1[0], target.y + o1[1], target.z + o1[2]);
     if (lv >= 2) target.set(target.x + o2[0], target.y + o2[1], target.z + o2[2]);
@@ -30,6 +32,7 @@ function Part({ id, o1 = Z, o2 = Z, children, position }: { id: string; o1?: V3;
   });
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    if (src.pick?.()) return;
     focused.obj = ref.current;
     useUI.getState().set(id === 'panel' ? { focus: id, panelOpen: true } : { focus: id });
   };
@@ -52,19 +55,21 @@ function Part({ id, o1 = Z, o2 = Z, children, position }: { id: string; o1?: V3;
 /** Hoses and cables that would hang loose in an exploded view are hidden while it is apart. */
 function Assembled({ children }: { children: ReactNode }) {
   const ref = useRef<THREE.Group>(null);
-  useFrame(() => (ref.current!.visible = useUI.getState().explode === 0));
+  const { view } = useGenset();
+  useFrame(() => (ref.current!.visible = view().explode === 0));
   return <group ref={ref}>{children}</group>;
 }
 
 // Engine block material turns to glass in detailed exploded view and X-ray.
-const BLOCK = M.teal.clone();
+export const BLOCK = M.teal.clone();
 BLOCK.transparent = true;
 function GhostBlock() {
+  const { view, block = BLOCK } = useGenset();
   useFrame(() => {
-    const { explode, xray } = useUI.getState();
+    const { explode, xray } = view();
     const target = explode === 2 || xray ? 0.16 : 1;
-    BLOCK.opacity += (target - BLOCK.opacity) * 0.12;
-    BLOCK.depthWrite = BLOCK.opacity > 0.9;
+    block.opacity += (target - block.opacity) * 0.12;
+    block.depthWrite = block.opacity > 0.9;
   });
   return null;
 }
@@ -73,7 +78,9 @@ function GhostBlock() {
 const DULL = new THREE.Color('#5a0800');
 const BRIGHT = new THREE.Color('#e8360c');
 function HotMetal() {
+  const { s: sim, plant } = useGenset();
   useFrame(() => {
+    if (plant) return; // the plant hall gives each set its own copy of M.hot
     const x = Math.max(0, Math.min(1, (sim.exhaust - 480) / 240));
     M.hot.emissive.copy(DULL).lerp(BRIGHT, x);
     M.hot.emissiveIntensity = x > 0 ? 0.35 + Math.pow(x, 1.6) * 2.4 : 0;
@@ -81,9 +88,10 @@ function HotMetal() {
   return null;
 }
 
-// Shared shaft angle for crank, pistons, rotor. Shown in slow motion: 1500 rpm is 157 rad/s, far past what a frame can show.
-const shaft = { angle: 0 };
+// Shaft angle for crank, pistons, rotor (one per set, from the source). Shown in slow motion: 1500 rpm is 157 rad/s,
+// far past what a frame can show.
 function ShaftClock() {
+  const { s: sim, shaft } = useGenset();
   useFrame((_, dt) => {
     shaft.angle += (sim.rpm / 1500) * 5.5 * Math.min(dt, 0.05);
   });
@@ -136,6 +144,7 @@ function BaseFrame() {
 // ---------- radiator & fan ----------
 
 function FanBlades() {
+  const { s: sim } = useGenset();
   const blades = useRef<THREE.Group>(null);
   const blur = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
@@ -238,6 +247,7 @@ const CRANK_LOCAL = -0.42; // crank centre measured along the bank axis from the
 
 /** Pistons and rods of one bank, driven by the shared shaft angle; crowns glow on the power stroke. */
 function Pistons({ side }: { side: 1 | -1 }) {
+  const { s: sim, shaft } = useGenset();
   const pistons = useRef<(THREE.Group | null)[]>([]);
   const rods = useRef<(THREE.Mesh | null)[]>([]);
   const crowns = useMemo(
@@ -296,6 +306,7 @@ function Pistons({ side }: { side: 1 | -1 }) {
 }
 
 function Crankshaft() {
+  const { shaft } = useGenset();
   const ref = useRef<THREE.Group>(null);
   useFrame(() => (ref.current!.rotation.x = shaft.angle));
   return (
@@ -366,14 +377,16 @@ function Bank({ side }: { side: 1 | -1 }) {
 /** Internals are shown when the block is glass. */
 function Internals({ children }: { children: ReactNode }) {
   const ref = useRef<THREE.Group>(null);
+  const { view } = useGenset();
   useFrame(() => {
-    const { explode, xray } = useUI.getState();
+    const { explode, xray } = view();
     ref.current!.visible = explode === 2 || xray;
   });
   return <group ref={ref}>{children}</group>;
 }
 
 function TurboWheel({ side }: { side: 1 | -1 }) {
+  const { s: sim } = useGenset();
   const ref = useRef<THREE.Group>(null);
   useFrame((_, dt) => (ref.current!.rotation.z += (sim.rpm / 1500) * (8 + 10 * Math.min(1, sim.genKw / 1800)) * dt * side));
   return (
@@ -595,6 +608,7 @@ function AirCleaners() {
 // ---------- alternator ----------
 
 function Rotor() {
+  const { shaft } = useGenset();
   const ref = useRef<THREE.Group>(null);
   useFrame(() => (ref.current!.rotation.x = shaft.angle));
   return (
@@ -704,6 +718,7 @@ function Alternator() {
 
 /** Engine rocking on its rubber mounts: firing pulses, a shudder while cranking, a wobble through resonance on run-down. */
 function Shaker({ children }: { children: ReactNode }) {
+  const { s: sim } = useGenset();
   const ref = useRef<THREE.Group>(null);
   const torque = useRef(0);
   useFrame(({ clock }, dt) => {
@@ -749,8 +764,9 @@ export function Genset() {
 /** Level 1 moves the whole alternator away from the engine. */
 function AlternatorMount() {
   const ref = useRef<THREE.Group>(null);
+  const { view } = useGenset();
   useFrame((_, dt) => {
-    const lv = useUI.getState().explode;
+    const lv = view().explode;
     ref.current!.position.x += ((lv >= 1 ? 1.6 : 0) - ref.current!.position.x) * Math.min(1, dt * 3);
   });
   return (

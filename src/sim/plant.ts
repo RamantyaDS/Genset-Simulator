@@ -35,6 +35,11 @@ export interface Unit {
   hours: number;
   coolant: number;
   exhaust: number;
+  oil: number; // bar
+  kwh: number;
+  eStop: boolean;
+  faultRadiator: boolean; // blocked radiator / slipping fan belt: coolant overheats
+  faultOil: boolean; // oil leak: pressure falls
 }
 
 export interface Feeder {
@@ -118,6 +123,11 @@ export function create(): Plant {
       hours: 6200 + i * 430,
       coolant: 45,
       exhaust: 30,
+      oil: 0,
+      kwh: 0,
+      eStop: false,
+      faultRadiator: false,
+      faultOil: false,
     })),
     feeders: FEEDERS.map(([name, short, shedOrder], id) => ({ id, name, short, shedOrder, on: false, demand: 0, outageMin: 0 })),
     busHz: 0,
@@ -175,6 +185,7 @@ const say = (p: Plant, m: string) => (p.message = m);
 
 export function startUnit(p: Plant, i: number) {
   const u = p.units[i];
+  if (u.eStop) return say(p, `Emergency stop genset ${i + 1} masih ditekan. Lepas dulu.`);
   if (u.alarm) return say(p, `Genset ${i + 1} masih ada alarm (${u.alarm}). Reset dulu.`);
   if (p.fuel <= 0) return say(p, 'Solar habis. Panggil truk tangki.');
   if (u.phase !== 'rest') return;
@@ -196,7 +207,20 @@ export function stopUnit(p: Plant, i: number) {
 
 export function resetUnit(p: Plant, i: number) {
   const u = p.units[i];
-  if (u.rpm < 1) u.alarm = null;
+  if (u.rpm < 1 && !u.eStop) u.alarm = null;
+}
+
+/** Mushroom button on the set: cuts fuel at once, whatever the set is doing; latched until released and reset. */
+export function setEStop(p: Plant, i: number, on: boolean) {
+  const u = p.units[i];
+  u.eStop = on;
+  if (!on) return;
+  if (u.phase === 'running') tripUnit(p, i, 'Emergency stop');
+  else if (u.phase !== 'rest') {
+    u.phase = 'stopping';
+    u.alarm = 'Emergency stop';
+    u.syncing = false;
+  } else u.alarm = 'Emergency stop';
 }
 
 export function trim(p: Plant, i: number, dHz: number, dV: number) {
@@ -435,6 +459,17 @@ export function step(p: Plant, dt: number) {
     u.coolant += ((runningU ? 79 + 10 * lf : 45) - u.coolant) * Math.min(1, dt / (runningU ? 60 : 600));
     u.exhaust += ((runningU ? 150 + 420 * lf : 30) - u.exhaust) * Math.min(1, dt / 20);
     if (runningU) u.hours += simMin / 60;
+    if (u.faultRadiator && runningU) u.coolant += (118 - u.coolant) * Math.min(1, dt / 25);
+    // Oil pressure as on the single set: ~4.6 bar warm at speed, lower while cranking; a leak drops it to a fifth.
+    const oilNorm = u.rpm > 600 ? 4.6 - 0.02 * (u.coolant - 75) : u.rpm > 50 ? 0.4 + 0.004 * u.rpm : 0;
+    const oilT = u.faultOil && u.rpm > 50 ? oilNorm * 0.18 : oilNorm;
+    u.oil += (oilT - u.oil) * Math.min(1, dt / (u.faultOil ? 6 : 0.8));
+    u.kwh += u.kw * (simMin / 60);
+    if (u.phase === 'running' && u.rpm > 1200) {
+      // DSE factory shutdown levels, as on the single set
+      if (u.coolant > 96) tripUnit(p, u.id, 'Suhu air pendingin tinggi');
+      else if (u.oil < 1.03) tripUnit(p, u.id, 'Tekanan oli rendah');
+    }
   }
 
   // Fuel and energy on the fast clock.

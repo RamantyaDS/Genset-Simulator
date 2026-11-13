@@ -256,7 +256,7 @@ export function App() {
             className="tour-start plant-start"
             onClick={() => {
               initSound();
-              useUI.getState().set({ mode: 'plant' });
+              useUI.getState().set({ mode: 'plant', explode: 0, xray: false, focus: null, panelOpen: false });
             }}
           >
             ⚡ Mode pembangkit 5 unit

@@ -3,12 +3,15 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { drawModule, H, W } from '../dse';
-import { sim, useUI } from '../store';
+import { useUI } from '../store';
+import { useGenset } from './source';
 import { Box, Cyl, M } from './parts';
 
 export const PANEL_POS: [number, number, number] = [2.72, 1.8, 0.62];
 
 export function ControlPanel() {
+  const src = useGenset();
+  const sim = src.s;
   const { tex, ctx } = useMemo(() => {
     const c = document.createElement('canvas');
     c.width = W / 2;
@@ -34,6 +37,7 @@ export function ControlPanel() {
         position={[x, y, z]}
         onClick={(e) => {
           e.stopPropagation();
+          if (src.pick?.()) return;
           useUI.getState().set({ panelOpen: true });
         }}
         onPointerOver={() => (document.body.style.cursor = 'pointer')}
