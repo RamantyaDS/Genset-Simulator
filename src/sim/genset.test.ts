@@ -172,3 +172,35 @@ describe('engine protections', () => {
     expect(s.coolant).toBeGreaterThanOrEqual(96);
   });
 });
+
+describe('restarting', () => {
+  it('starts again after an overload trip and cool-down', () => {
+    const s = create();
+    pressTest(s);
+    pressStart(s);
+    run(s, 25);
+    s.demandKw = 2100;
+    run(s, TIMERS.overloadTrip + TIMERS.cooling + 20);
+    expect(s.rpm).toBe(0);
+    s.demandKw = 1200;
+    pressManual(s);
+    pressStart(s);
+    run(s, 25);
+    expect(s.alarms).not.toContain('lowOil');
+    expect(genAvailable(s)).toBe(true);
+  });
+
+  it('starts again after a normal stop', () => {
+    const s = create();
+    pressManual(s);
+    pressStart(s);
+    run(s, 25);
+    pressStop(s);
+    run(s, 20);
+    pressManual(s);
+    pressStart(s);
+    run(s, 25);
+    expect(s.alarms).toEqual([]);
+    expect(genAvailable(s)).toBe(true);
+  });
+});

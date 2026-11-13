@@ -246,6 +246,7 @@ function beginStart(s: State, delay: number) {
 
 function beginCrank(s: State) {
   s.attempt++;
+  s.sinceStart = 0; // the safety-on delay restarts with every start
   s.phase = 'crank';
   s.timer = TIMERS.crank;
   s.fuelOn = true;
@@ -442,7 +443,7 @@ export function step(s: State, dt: number) {
   let next = s.rpm + (target - s.rpm) * Math.min(1, dt / tau);
   if (s.firing && next - s.rpm > 260 * dt) next = s.rpm + 260 * dt; // fuel limiting while running up
   s.rpm = next < 0.5 && target === 0 ? 0 : next;
-  if (s.firing) s.sinceStart += dt;
+  if (s.firing && s.phase !== 'crank') s.sinceStart += dt; // counts from crank disconnect
   if (s.phase === 'stopping' && s.rpm === 0) s.phase = 'rest';
 
   // Load: the building through the generator breaker, plus the load bank when it is switched in.
@@ -508,7 +509,7 @@ export function step(s: State, dt: number) {
   if (s.alarms.includes('overloadTrip') && s.rpm === 0) clear(s, 'overloadTrip');
 
   // Engine protections, armed once the safety-on delay has passed.
-  if (s.firing && s.sinceStart >= TIMERS.safety) {
+  if (s.firing && (s.phase === 'running' || s.phase === 'cooling') && s.sinceStart >= TIMERS.safety) {
     if (s.coolant >= PROTECT.tempShut) raise(s, 'highTemp');
     else if (s.coolant >= PROTECT.tempWarn) raise(s, 'highTempWarn');
     if (s.oil <= PROTECT.oilShut) raise(s, 'lowOil');
