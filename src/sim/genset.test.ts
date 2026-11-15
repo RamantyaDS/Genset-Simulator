@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BULK_L, TANK_L, TIMERS, callTanker, create, drainFuel, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
+import { BULK_L, EXERCISE_S, TANK_L, TIMERS, callTanker, create, drainFuel, drainSeparator, startExercise, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
 
 const run = (s: State, seconds: number, dt = 0.05) => {
   for (let t = 0; t < seconds; t += dt) step(s, dt);
@@ -240,5 +240,56 @@ describe('building UPS, outage stopwatch and fuel transfer', () => {
     callTanker(s);
     runFor(s, 25);
     expect(s.bulk).toBeGreaterThan(BULK_L * 0.99); // the pump is already drawing from it
+  });
+});
+
+describe('battery, jacket heater, water in fuel, exercise and logbook', () => {
+  const runFor = (s: ReturnType<typeof create>, sec: number) => {
+    for (let t = 0; t < sec; t += 0.02) step(s, 0.02);
+  };
+
+  it('a worn-out battery cranks too slowly and the start fails', () => {
+    const s = create();
+    s.batHealth = 0.3;
+    s.batSoc = 0.5;
+    setMains(s, false);
+    runFor(s, 80);
+    expect(s.firing).toBe(false);
+    expect(s.alarms).toContain('failStart');
+  });
+
+  it('without the jacket heater the engine is cold and takes longer to fire', () => {
+    const warm = create();
+    const cold = create();
+    cold.heaterOn = false;
+    cold.coolant = 28;
+    for (const s of [warm, cold]) {
+      setMains(s, false);
+      runFor(s, 40);
+    }
+    expect(cold.runs[0].crankSec).toBeGreaterThan(warm.runs[0].crankSec + 1);
+  });
+
+  it('water fills the separator bowl, then starves the engine; draining it fixes that', () => {
+    const s = create();
+    s.waterIngress = true;
+    setMains(s, false);
+    runFor(s, 400);
+    expect(s.alarms).toContain('fuelWaterStop');
+    expect(s.firing).toBe(false);
+    drainSeparator(s);
+    expect(s.water).toBe(0);
+  });
+
+  it('the weekly exercise runs off-load for 15 minutes and is logged', () => {
+    const s = create();
+    expect(startExercise(s)).toBe(true);
+    for (let t = 0; t < EXERCISE_S + 120; t += 0.1) step(s, 0.1);
+    expect(s.phase).toBe('rest');
+    const r = s.runs[0];
+    expect(r.why).toContain('Uji mingguan');
+    expect(r.end).toBeGreaterThan(r.start + EXERCISE_S - 5);
+    expect(r.kwh).toBe(0);
+    expect(r.minOil).toBeGreaterThan(3);
   });
 });

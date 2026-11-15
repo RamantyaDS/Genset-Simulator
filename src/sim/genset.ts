@@ -71,7 +71,10 @@ export type AlarmId =
   | 'highTempWarn'
   | 'highTemp'
   | 'lowOilWarn'
-  | 'lowOil';
+  | 'lowOil'
+  | 'batteryLow'
+  | 'fuelWater'
+  | 'fuelWaterStop';
 export const ALARMS: Record<AlarmId, { text: string; kind: 'warning' | 'trip' | 'shutdown' }> = {
   failStart: { text: 'Fail to start', kind: 'shutdown' },
   lowFuel: { text: 'Low fuel level', kind: 'warning' },
@@ -83,6 +86,9 @@ export const ALARMS: Record<AlarmId, { text: string; kind: 'warning' | 'trip' | 
   highTemp: { text: 'Coolant Temp High', kind: 'shutdown' },
   lowOilWarn: { text: 'Oil Pressure Low', kind: 'warning' },
   lowOil: { text: 'Oil Pressure Low', kind: 'shutdown' },
+  batteryLow: { text: 'Battery Under Voltage', kind: 'warning' },
+  fuelWater: { text: 'Water In Fuel', kind: 'warning' },
+  fuelWaterStop: { text: 'Fuel Starvation', kind: 'shutdown' },
 };
 
 // DSE7320 factory protection levels (config suite 057-243).
@@ -137,6 +143,29 @@ export interface State {
   upsCharge: number; // 0..1
   upsOnBattery: boolean;
   outage: Outage;
+  batHealth: number; // 1 a good battery … 0.3 worn out
+  batSoc: number; // state of charge 0..1
+  chargerOk: boolean; // mains battery charger working
+  crankV: number; // lowest voltage seen during the last crank
+  heaterOn: boolean; // jacket water heater keeps a standby engine warm
+  waterIngress: boolean; // water getting into the fuel (bad delivery, condensation)
+  water: number; // water in the separator bowl, 1 = full
+  exercise: number; // seconds left of a scheduled off-load exercise run, 0 none
+  runs: RunLog[];
+}
+
+/** One line of the engine logbook. */
+export interface RunLog {
+  start: number;
+  end: number; // −1 while running
+  why: string;
+  kwh: number;
+  litres: number;
+  maxCoolant: number;
+  minOil: number; // lowest oil pressure once at speed
+  crankV: number;
+  crankSec: number;
+  alarms: string[];
 }
 
 /** Stopwatch of the last mains failure: what happened when, and how long each kind of load was dark. */
@@ -198,8 +227,37 @@ export function create(): State {
     upsCharge: 1,
     upsOnBattery: false,
     outage: { active: false, start: 0, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false },
+    batHealth: 1,
+    batSoc: 1,
+    chargerOk: true,
+    crankV: 0,
+    heaterOn: true,
+    waterIngress: false,
+    water: 0.05,
+    exercise: 0,
+    runs: [],
   };
 }
+
+export const EXERCISE_S = 15 * 60;
+
+/** Weekly exercise: start off-load for 15 minutes in Auto with the mains healthy, then stop by itself. */
+export function startExercise(s: State) {
+  if (s.mode !== 'auto' || !s.mainsOk || s.phase !== 'rest' || shutdownActive(s)) return false;
+  s.exercise = EXERCISE_S;
+  beginStart(s, 0);
+  return true;
+}
+
+export function drainSeparator(s: State) {
+  s.water = 0;
+  clear(s, 'fuelWater');
+}
+
+/** Battery terminal voltage at rest (24 V system), from charge and health. */
+export const restVolts = (s: State) => 23.2 + 2.6 * s.batSoc * (0.55 + 0.45 * s.batHealth);
+/** Under the starter's load a worn or flat battery sags hard. */
+export const crankVolts = (s: State) => restVolts(s) - 4.2 - 7 * (1 - s.batHealth) - 4 * (1 - s.batSoc);
 
 /** The building's ordinary load has supply: through the mains breaker, or through the generator breaker. */
 export const normalPowered = (s: State) => (s.mcb && s.mainsOk) || (s.gcb && s.volts > 300);
@@ -249,6 +307,7 @@ export function statusText(s: State): [string, string] {
       if (s.sinceStart < TIMERS.safety) return ['Safety Delay', clock(TIMERS.safety - s.sinceStart)];
       if (!genAvailable(s)) return ['Waiting For Generator', ''];
       if (s.gcb) return ['Generator On Load', ''];
+      if (s.exercise > 0) return ['Scheduled Run', clock(s.exercise)];
       if (s.mode === 'auto' && s.mainsOk && s.mainsBackFor > 0) return ['Return Delay', clock(TIMERS.returnDelay - s.mainsBackFor)];
       if (s.warm < TIMERS.warmup) return ['Warming', clock(TIMERS.warmup - s.warm)];
       return ['Generator Available', ''];
@@ -331,7 +390,7 @@ export function pressStop(s: State) {
   emit(s, 'beep');
   // Second press with the engine at rest resets latched alarms.
   if (s.mode === 'stop' && s.rpm < 1)
-    s.alarms = s.alarms.filter((a) => (a === 'estop' && s.eStop) || (a === 'fuelEmpty' && s.fuel <= 0) || (a === 'highTemp' && s.coolant >= PROTECT.tempShut));
+    s.alarms = s.alarms.filter((a) => (a === 'estop' && s.eStop) || (a === 'fuelEmpty' && s.fuel <= 0) || (a === 'highTemp' && s.coolant >= PROTECT.tempShut) || (a === 'fuelWaterStop' && s.water >= 1.3));
   s.mode = 'stop';
   stopEngine(s);
   if (s.mainsOk) setMcb(s, true);
@@ -449,14 +508,14 @@ export function step(s: State, dt: number) {
         setMcb(s, false);
         setGcb(s, true);
       }
-      if (s.mainsOk && s.mainsBackFor >= TIMERS.returnDelay) {
+      if (s.mainsOk && s.mainsBackFor >= TIMERS.returnDelay && s.exercise <= 0) {
         if (s.gcb) setGcb(s, false);
         setMcb(s, true);
         s.phase = 'cooling';
         s.timer = TIMERS.cooling;
       }
     }
-    if (s.phase === 'running' && s.mainsOk && s.mainsBackFor >= TIMERS.returnDelay && !s.gcb && !genAvailable(s) && s.sinceStart > TIMERS.safety) {
+    if (s.phase === 'running' && s.exercise <= 0 && s.mainsOk && s.mainsBackFor >= TIMERS.returnDelay && !s.gcb && !genAvailable(s) && s.sinceStart > TIMERS.safety) {
       s.phase = 'cooling';
       s.timer = TIMERS.cooling;
     }
@@ -508,7 +567,8 @@ export function step(s: State, dt: number) {
   // Engine.
   const hasFuel = s.fuel > 0;
   if (s.firing && (!s.fuelOn || !hasFuel)) s.firing = false;
-  if (!s.firing && s.fuelOn && hasFuel && s.starter && s.rpm > 100 && s.phase === 'crank' && TIMERS.crank - s.timer > 2.2) {
+  const cold = s.coolant < 35;
+  if (!s.firing && s.fuelOn && hasFuel && s.water < 1.3 && s.starter && s.rpm > (cold ? 120 : 100) && s.phase === 'crank' && TIMERS.crank - s.timer > (cold ? 3.6 : 2.2)) {
     s.firing = true;
     emit(s, 'fire');
   }
@@ -518,7 +578,8 @@ export function step(s: State, dt: number) {
     target = RATING.rpm;
     tau = s.rpm < 1200 ? 1.6 : 0.5;
   } else if (s.starter) {
-    target = 150;
+    // cranking speed follows the battery: a sagging battery turns the engine too slowly to fire
+    target = 150 * Math.max(0, Math.min(1.1, (crankVolts(s) - 12) / 7.6));
     tau = 0.35;
   } else {
     target = 0;
@@ -575,7 +636,7 @@ export function step(s: State, dt: number) {
   const lf = loadFrac(s);
   // Coolant: a jacket-water heater keeps a standby set at ~45 °C; running, the thermostat holds 80–90 °C depending on load.
   // A blocked radiator lets it climb past the alarm levels.
-  const coolTarget = s.firing ? (s.faultRadiator ? 112 : 79 + 10 * lf) : 45;
+  const coolTarget = s.firing ? (s.faultRadiator ? 112 : 79 + 10 * lf) : s.heaterOn && (s.mainsOk || normalPowered(s)) ? 45 : 28;
   const coolTau = s.firing ? (s.coolant < 75 && !s.faultRadiator ? 240 : 90) : 900;
   s.coolant += (coolTarget - s.coolant) * Math.min(1, dt / coolTau);
   // Exhaust gas before the turbines: ~150 °C idling, roughly 550–600 °C at prime power, higher in overload.
@@ -585,8 +646,61 @@ export function step(s: State, dt: number) {
   const oilNorm = s.rpm > 600 ? 4.6 - 0.02 * (s.coolant - 75) : s.rpm > 50 ? 0.4 + 0.004 * s.rpm : 0;
   const oilTarget = s.faultOil && s.rpm > 50 ? oilNorm * 0.18 : oilNorm;
   s.oil += (oilTarget - s.oil) * Math.min(1, dt / (s.faultOil ? 6 : 0.8));
-  const batTarget = s.starter ? 19.6 : s.firing && s.rpm > 900 ? 27.6 : 25.6;
+  // Battery: the charger (mains) or the engine's alternator keeps it topped up; without either it slowly drains.
+  if (s.starter) s.batSoc = Math.max(0, s.batSoc - dt / 900);
+  else if ((s.chargerOk && s.mainsOk) || (s.firing && s.rpm > 900)) s.batSoc = Math.min(1, s.batSoc + dt / 600);
+  else s.batSoc = Math.max(0, s.batSoc - dt / 2400);
+  const batTarget = s.starter ? crankVolts(s) : s.firing && s.rpm > 900 ? 27.6 : s.chargerOk && s.mainsOk ? Math.max(restVolts(s), 26.8 * (0.6 + 0.4 * s.batHealth)) : restVolts(s);
   s.battery += (batTarget - s.battery) * Math.min(1, dt / (s.starter ? 0.15 : 2));
+  if (s.starter) s.crankV = Math.min(s.crankV || 99, s.battery);
+  if (!s.starter && !s.firing && s.battery < 24) raise(s, 'batteryLow');
+  else if (s.battery > 24.6) clear(s, 'batteryLow');
+
+  // Water in fuel: collects in the separator bowl; once it overflows the engine stumbles, then starves.
+  if (s.waterIngress && s.firing) s.water = Math.min(1.35, s.water + dt / 240);
+  if (s.water > 0.6) raise(s, 'fuelWater');
+  if (s.firing && s.water > 1 && Math.random() < dt * 4) s.dipFv -= 0.025 + 0.03 * Math.random();
+  if (s.firing && s.water >= 1.3) {
+    raise(s, 'fuelWaterStop');
+    stopEngine(s);
+  }
+
+  // Scheduled exercise: off-load run, then a normal stop with cool-down.
+  if (s.exercise > 0 && (s.phase === 'running' || s.phase === 'crank' || s.phase === 'crankRest')) {
+    if (s.phase === 'running') s.exercise -= dt;
+    if (s.exercise <= 0 || !s.mainsOk) {
+      s.exercise = 0;
+      if (s.mainsOk && s.phase === 'running' && !s.gcb) {
+        s.phase = 'cooling';
+        s.timer = TIMERS.cooling;
+      }
+    }
+  } else if (s.phase === 'rest') s.exercise = 0;
+
+  // Logbook: one entry per run, from first fire to stop.
+  const log = s.runs[s.runs.length - 1];
+  if (s.firing && (!log || log.end >= 0)) {
+    s.runs.push({
+      start: s.t,
+      end: -1,
+      why: s.exercise > 0 ? 'Uji mingguan (tanpa beban)' : !s.mainsOk ? 'PLN padam' : s.mode === 'test' ? 'Tes beban' : 'Manual',
+      kwh: 0,
+      litres: 0,
+      maxCoolant: s.coolant,
+      minOil: 99,
+      crankV: s.crankV,
+      crankSec: TIMERS.crank - s.timer + (s.attempt - 1) * TIMERS.crank,
+      alarms: [],
+    });
+    s.crankV = 0;
+  } else if (log && log.end < 0) {
+    log.kwh += (s.genKw * dt) / 3600;
+    log.litres += (fuelRate(s) * dt) / 3600;
+    log.maxCoolant = Math.max(log.maxCoolant, s.coolant);
+    if (s.rpm > 1400 && s.sinceStart > TIMERS.safety) log.minOil = Math.min(log.minOil, s.oil);
+    for (const a of s.alarms) if (!log.alarms.includes(ALARMS[a].text)) log.alarms.push(ALARMS[a].text);
+    if (s.rpm === 0) log.end = s.t;
+  }
 
   // Transfer pump: level switch on the day tank, fuel from the bulk tank; the tanker refills the bulk tank.
   if (s.pumpAuto && s.fuel < TANK_L * 0.6 && s.bulk > 0) s.pumping = true;

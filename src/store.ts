@@ -19,6 +19,7 @@ interface UI {
   sky: 'malam' | 'siang';
   weather: 'cerah' | 'hujan' | 'badai';
   cinematic: boolean; // camera follows the AMF sequence
+  logOpen: boolean; // engine logbook dialog
   plnAutoReturn: boolean; // after a lightning strike the mains comes back by itself
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
@@ -37,6 +38,7 @@ export const useUI = createStore<UI>((setState) => ({
   sky: 'malam',
   weather: 'cerah',
   cinematic: false,
+  logOpen: false,
   plnAutoReturn: true,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),

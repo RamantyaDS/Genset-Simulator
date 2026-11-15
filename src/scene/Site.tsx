@@ -94,7 +94,11 @@ function UpsCabinet() {
   }, []);
   const last = useRef(0);
   const led = useRef<THREE.MeshStandardMaterial>(null);
+  const chg = useRef<THREE.MeshStandardMaterial>(null);
   useFrame(({ clock }) => {
+    const cc = !sim.chargerOk ? (Math.floor(clock.elapsedTime * 2) % 2 ? '#ff3b30' : '#400') : sim.mainsOk ? '#39d353' : '#3a3d40';
+    chg.current!.color.set(cc);
+    chg.current!.emissive.set(cc);
     const col = !sim.upsOn ? '#3a3d40' : sim.upsCharge === 0 ? '#ff3b30' : sim.upsOnBattery ? (Math.floor(clock.elapsedTime * 2.5) % 2 ? '#ffb020' : '#553300') : '#39d353';
     led.current!.color.set(col);
     led.current!.emissive.set(col);
@@ -126,6 +130,16 @@ function UpsCabinet() {
       </Text>
       <Text position={[1.0, 1.4, 0.36]} fontSize={0.08} color="#cfd6dc">
         BATERAI 30 kWh
+      </Text>
+      {/* genset starter-battery charger, fed from the mains */}
+      <Box s={[0.45, 0.55, 0.2]} r={0.01} m={M.white} position={[-1.35, 1.35, 0.25]} />
+      <mesh position={[-1.35, 1.48, 0.355]}>
+        <circleGeometry args={[0.03, 16]} />
+        <meshStandardMaterial ref={chg} color="#39d353" emissive="#39d353" emissiveIntensity={2.5} />
+      </mesh>
+      <Text position={[-1.35, 1.32, 0.355]} fontSize={0.045} color="#1b2228">
+        {`CHARGER AKI
+24 V`}
       </Text>
     </group>
   );

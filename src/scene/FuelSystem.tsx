@@ -36,6 +36,42 @@ function Gauge({ at, level, h }: { at: [number, number, number]; level: () => nu
   );
 }
 
+/** Fuel/water separator on the feed line: a clear bowl where water settles under the fuel. */
+function Separator() {
+  const water = useRef<THREE.Mesh>(null);
+  const fuel = useRef<THREE.Mesh>(null);
+  const BOWL = 0.22;
+  useFrame(() => {
+    const w = Math.min(1, sim.water) * BOWL;
+    water.current!.scale.y = Math.max(0.001, w / BOWL);
+    water.current!.position.y = 0.1 + w / 2;
+    fuel.current!.scale.y = Math.max(0.001, (BOWL - w) / BOWL);
+    fuel.current!.position.y = 0.1 + w + (BOWL - w) / 2;
+  });
+  return (
+    <group position={[-1.15, 0.22, 2.75]}>
+      <Box s={[0.22, 0.04, 0.22]} m={M.cast} position={[0, 0.02, 0]} />
+      <Cyl r={0.09} l={0.14} m={M.steel} position={[0, BOWL + 0.17, 0]} />
+      <mesh position={[0, 0.1 + BOWL / 2, 0]}>
+        <cylinderGeometry args={[0.075, 0.075, BOWL, 20, 1, true]} />
+        <meshStandardMaterial color="#d8e8f0" transparent opacity={0.25} roughness={0.05} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh ref={fuel}>
+        <cylinderGeometry args={[0.07, 0.07, BOWL, 20]} />
+        <meshStandardMaterial color="#d9a531" transparent opacity={0.75} roughness={0.2} />
+      </mesh>
+      <mesh ref={water}>
+        <cylinderGeometry args={[0.07, 0.07, BOWL, 20]} />
+        <meshStandardMaterial color="#6fa8c8" transparent opacity={0.85} roughness={0.1} />
+      </mesh>
+      <Cyl r={0.015} l={0.06} m={M.red} position={[0, 0.07, 0]} />
+      <Text position={[0, 0.52, 0]} fontSize={0.05} color="#e9eef2">
+        SEPARATOR AIR
+      </Text>
+    </group>
+  );
+}
+
 function Tanker() {
   const g = useRef<THREE.Group>(null);
   useFrame(() => (g.current!.visible = sim.truckIn >= 0));
@@ -102,6 +138,7 @@ export function FuelSystem() {
         TANGKI TIMBUN 10.000 L (BAWAH TANAH)
       </Text>
       <Tanker />
+      <Separator />
       <Flow pts={feed} color="#ff9a2e" on={() => sim.firing && sim.fuel > 0} speed={1} width={4} />
       <Flow pts={transfer} color="#ff9a2e" on={() => sim.pumping} speed={2} width={4} />
       <Flow pts={hose} color="#ff9a2e" on={() => sim.truckIn >= 0} speed={2.5} width={5} />

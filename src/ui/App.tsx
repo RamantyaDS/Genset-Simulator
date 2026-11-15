@@ -2,7 +2,24 @@ import { useEffect, useState } from 'react';
 import { Experience } from '../scene/Experience';
 import { goTo, setInset, type Preset } from '../scene/camera';
 import { FLOW_COLORS } from '../scene/Flows';
-import { BULK_L, RATING, TANK_L, amps, callTanker, drainFuel, fuelRate, genAvailable, hoursLeft, hz, loadFrac, setEStop, setMains } from '../sim/genset';
+import {
+  BULK_L,
+  RATING,
+  TANK_L,
+  amps,
+  callTanker,
+  drainFuel,
+  drainSeparator,
+  fuelRate,
+  genAvailable,
+  hoursLeft,
+  hz,
+  loadFrac,
+  setEStop,
+  setMains,
+  startExercise,
+} from '../sim/genset';
+import { Logbook } from './Logbook';
 import { Stopwatch } from './Stopwatch';
 import { sequence } from '../dse';
 import { initSound, setSound } from '../sound';
@@ -160,6 +177,45 @@ function Controls() {
         </button>
       </div>
 
+      <h2>Perawatan</h2>
+      <div className="maint">
+        <span>Aki starter</span>
+        <b className={sim.battery < 24 ? 'bad' : ''}>
+          {sim.battery.toFixed(1)} V · kondisi {Math.round(sim.batHealth * 100)}%
+        </b>
+        <span>Separator air</span>
+        <b className={sim.water > 0.6 ? 'bad' : ''}>{Math.round(Math.min(1, sim.water) * 100)}% penuh</b>
+        <span>Air pendingin</span>
+        <b>
+          {Math.round(sim.coolant)} °C · heater {sim.heaterOn ? 'nyala' : 'mati'}
+        </b>
+      </div>
+      <div className="row">
+        <button disabled={sim.mode !== 'auto' || !sim.mainsOk || sim.phase !== 'rest'} title="Genset harus Auto, PLN normal, dan mesin diam" onClick={() => startExercise(sim)}>
+          {sim.exercise > 0 ? `Uji mingguan ${Math.ceil(sim.exercise / 60)} mnt` : '🗓 Uji mingguan (15 mnt)'}
+        </button>
+        <button className={ui.logOpen ? 'on' : ''} onClick={() => ui.set({ logOpen: !ui.logOpen })}>
+          📒 Logbook ({sim.runs.length})
+        </button>
+      </div>
+      <div className="row">
+        <button className={sim.heaterOn ? 'on' : ''} onClick={() => (sim.heaterOn = !sim.heaterOn)}>
+          Jacket heater {sim.heaterOn ? 'nyala' : 'mati'}
+        </button>
+        <button onClick={() => drainSeparator(sim)}>Kuras separator</button>
+      </div>
+      <div className="row">
+        <button
+          disabled={sim.batHealth > 0.99 && sim.batSoc > 0.99}
+          onClick={() => {
+            sim.batHealth = 1;
+            sim.batSoc = 1;
+          }}
+        >
+          🔋 Ganti aki
+        </button>
+      </div>
+
       <h2>Gangguan</h2>
       <div className="row">
         <button className={sim.eStop ? 'on danger' : ''} onClick={() => setEStop(sim, !sim.eStop)}>
@@ -173,6 +229,25 @@ function Controls() {
         </button>
         <button className={sim.faultOil ? 'on danger' : ''} onClick={() => (sim.faultOil = !sim.faultOil)}>
           Oli bocor
+        </button>
+      </div>
+      <div className="row">
+        <button
+          className={sim.batHealth < 0.5 ? 'on danger' : ''}
+          onClick={() => {
+            sim.batHealth = sim.batHealth < 0.5 ? 1 : 0.32;
+            sim.batSoc = Math.min(sim.batSoc, 0.55);
+          }}
+        >
+          Aki lemah
+        </button>
+        <button className={!sim.chargerOk ? 'on danger' : ''} onClick={() => (sim.chargerOk = !sim.chargerOk)}>
+          Charger aki rusak
+        </button>
+      </div>
+      <div className="row">
+        <button className={sim.waterIngress ? 'on danger' : ''} onClick={() => (sim.waterIngress = !sim.waterIngress)}>
+          Air masuk solar
         </button>
       </div>
 
@@ -282,6 +357,7 @@ export function App() {
   const [started, setStarted] = useState(false);
   const panelOpen = useUI((s) => s.panelOpen);
   const tour = useUI((s) => s.tour);
+  const logOpen = useUI((s) => s.logOpen);
   // Phones show one sheet at a time: the controls, or the DSE panel.
   const [narrow, setNarrow] = useState(() => innerWidth <= 900);
   useEffect(() => {
@@ -326,6 +402,7 @@ export function App() {
       {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
       {panelOpen && !(narrow && tour !== null) && <DsePanel />}
       <PartCard />
+      {logOpen && <Logbook onClose={() => useUI.getState().set({ logOpen: false })} />}
       {!started && (
         <div className="intro">
           <div>
