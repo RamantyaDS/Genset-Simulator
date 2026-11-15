@@ -40,6 +40,7 @@ function Part({ id, o1 = Z, o2 = Z, children, position }: { id: string; o1?: V3;
     <group
       ref={ref}
       position={position}
+      userData={{ part: id }}
       onClick={click}
       onPointerOver={(e) => {
         e.stopPropagation();

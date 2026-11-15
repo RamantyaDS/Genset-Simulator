@@ -20,6 +20,7 @@ export const PRESETS = {
   fuel: { pos: [3, 6.5, 14], target: [-7, 0.5, 4.5] },
   ups: { pos: [12, 2.6, 0.5], target: [8.6, 1.1, -4.5] },
   atsOpen: { pos: [7.4, 1.6, -2.4], target: [7, 1.15, -4.6] },
+  cylinder: { pos: [-28.2, 3.6, 25], target: [-30, 3.1, 18] },
 } as const;
 
 export type Preset = keyof typeof PRESETS;

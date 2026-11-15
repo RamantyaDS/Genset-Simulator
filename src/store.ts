@@ -23,6 +23,9 @@ interface UI {
   isoOpen: boolean; // ISO 8528 recorder
   scopeOpen: boolean; // three-phase oscilloscope
   atsOpen: boolean; // ATS cabinet door open
+  thermal: boolean; // thermal camera view
+  cylinder: boolean; // bullet-time cylinder cutaway
+  cylSpeed: number; // seconds per four-stroke cycle
   plnAutoReturn: boolean; // after a lightning strike the mains comes back by itself
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
@@ -45,6 +48,9 @@ export const useUI = createStore<UI>((setState) => ({
   isoOpen: false,
   scopeOpen: false,
   atsOpen: false,
+  thermal: false,
+  cylinder: false,
+  cylSpeed: 8,
   plnAutoReturn: true,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),

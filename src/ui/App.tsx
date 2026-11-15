@@ -21,6 +21,7 @@ import {
 } from '../sim/genset';
 import { Logbook } from './Logbook';
 import { IsoPanel, Scope } from './Instruments';
+import { CylinderCard, ThermalCard } from './Modes';
 import { Stopwatch } from './Stopwatch';
 import { sequence } from '../dse';
 import { initSound, setSound } from '../sound';
@@ -297,6 +298,21 @@ function Controls() {
 
       <h2>Tampilan</h2>
       <div className="row">
+        <button className={ui.thermal ? 'on' : ''} onClick={() => ui.set({ thermal: !ui.thermal })}>
+          🌡 Kamera termal
+        </button>
+        <button
+          className={ui.cylinder ? 'on' : ''}
+          onClick={() => {
+            const on = !ui.cylinder;
+            ui.set({ cylinder: on });
+            goTo(on ? 'cylinder' : 'genset');
+          }}
+        >
+          🔬 Satu silinder
+        </button>
+      </div>
+      <div className="row">
         <button className={ui.view === 'open' ? 'on' : ''} onClick={() => ui.set({ view: 'open' })}>
           Open type
         </button>
@@ -371,6 +387,8 @@ export function App() {
   const logOpen = useUI((s) => s.logOpen);
   const isoOpen = useUI((s) => s.isoOpen);
   const scopeOpen = useUI((s) => s.scopeOpen);
+  const thermal = useUI((s) => s.thermal);
+  const cylinder = useUI((s) => s.cylinder);
   // Phones show one sheet at a time: the controls, or the DSE panel.
   const [narrow, setNarrow] = useState(() => innerWidth <= 900);
   useEffect(() => {
@@ -418,6 +436,8 @@ export function App() {
       {logOpen && <Logbook onClose={() => useUI.getState().set({ logOpen: false })} />}
       {isoOpen && <IsoPanel onClose={() => useUI.getState().set({ isoOpen: false })} />}
       {scopeOpen && <Scope onClose={() => useUI.getState().set({ scopeOpen: false })} />}
+      {thermal && <ThermalCard />}
+      {cylinder && <CylinderCard />}
       {!started && (
         <div className="intro">
           <div>

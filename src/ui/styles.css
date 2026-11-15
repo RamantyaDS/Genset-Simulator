@@ -696,3 +696,77 @@ button:focus-visible {
   color: #ff7a6a;
   font-weight: 700;
 }
+
+/* special view cards */
+.mode-card {
+  position: fixed;
+  left: 322px;
+  bottom: 16px;
+  width: 380px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  z-index: 4;
+}
+.mode-card .hint {
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+  margin: 6px 0 0;
+}
+.thermal-card .scale {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  font-size: 11px;
+  color: var(--dim);
+  margin: 4px 0 6px;
+}
+.thermal-card .scale i {
+  grid-column: 1 / -1;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #050014, #59008c 20%, #d90d40 45%, #ff8000 70%, #ffeb59 90%, #fff);
+}
+.thermal-card .scale span:nth-child(3) {
+  text-align: center;
+}
+.thermal-card .scale span:last-child {
+  text-align: right;
+}
+.thermal-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+}
+.thermal-card li {
+  display: flex;
+  justify-content: space-between;
+}
+.cyl-card .strokes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin: 4px 0;
+}
+.cyl-card .strokes span {
+  text-align: center;
+  padding: 4px 2px;
+  border-radius: 6px;
+  background: #ffffff0d;
+  font-size: 11px;
+  font-weight: 600;
+}
+.cyl-card .strokes .on {
+  background: #e8b923;
+  color: #2a1f00;
+}
+.st-desc {
+  min-height: 72px;
+  line-height: 1.45;
+  margin: 6px 0;
+}

@@ -13,6 +13,8 @@ import { Flows } from './Flows';
 import { FocusHighlight } from './FocusHighlight';
 import { FuelSystem } from './FuelSystem';
 import { Director, SkyLight, Weather } from './Weather';
+import { ThermalView } from './Thermal';
+import { CylinderCutaway } from './Cylinder';
 import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
 import { LoadBank } from './LoadBank';
@@ -102,6 +104,8 @@ export function Experience() {
       <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
       <FocusHighlight />
       <SkyLight hemi={hemi} sun={sun} />
+      <ThermalView />
+      <CylinderCutaway />
       <Weather />
       <Director />
       <FuelSystem />
