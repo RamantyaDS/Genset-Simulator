@@ -437,7 +437,7 @@ export function App() {
         )}
       </header>
       <Gauges />
-      {tour === null && !narrow && <Stopwatch />}
+      {tour === null && <Stopwatch compact={narrow} />}
       {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
       {panelOpen && !(narrow && tour !== null) && <DsePanel />}
       <PartCard />

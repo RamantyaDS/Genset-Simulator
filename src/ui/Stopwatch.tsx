@@ -5,11 +5,12 @@ import { sim, useUI } from '../store';
 const sec = (v: number) => `${v.toFixed(1).replace('.', ',')} dtk`;
 
 /** Stopwatch of the last mains failure: the AMF sequence second by second and how long the building was dark. */
-export function Stopwatch() {
+export function Stopwatch({ compact = false }: { compact?: boolean }) {
   useUI((s) => s.tick);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(!compact);
   const o = sim.outage;
   const has = o.steps.length > 0;
+  if (compact && !has) return null; // on a phone it only appears once there is something to time
   return (
     <section className="stopwatch" aria-label="Stopwatch PLN padam">
       <div className="sw-head">

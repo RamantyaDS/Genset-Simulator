@@ -33,6 +33,31 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 - Asap knalpot seperti diesel asli: uap putih saat starter, kepulan hitam saat mesin menyala, kabut putih kebiruan saat mesin masih dingin, jelaga hitam saat beban naik mendadak (turbo lag), hampir bening saat jalan normal, dan abu-abu gelap saat overload
 - Narasi bahasa Indonesia yang menjelaskan apa yang sedang terjadi di setiap tahap
 
+### Gedung, UPS, dan bahan bakar
+
+- UPS gedung 60 kW (sekitar 30 menit) menanggung beban kritis (ruang server, lampu darurat tangga) tanpa jeda saat PLN padam; lantai biasa padam lalu menyala lagi satu per satu setelah genset masuk
+- Stopwatch PLN padam: urutan AMF per detik dan berapa lama beban biasa dan beban kritis gelap, dengan atau tanpa UPS, termasuk kedip sesaat saat balik ke PLN (open transition) dan penjelasan closed transition
+- Tangki harian 2000 L dengan gelas penduga, tangki timbun bawah tanah 10.000 L, pompa transfer otomatis, truk tangki pengisi, dan separator air yang mangkuknya bisa dilihat
+
+### Perawatan dan uji
+
+- Aki starter dengan kondisi dan muatan: aki lemah membuat starter berat sampai gagal start; charger rusak membuat aki terkuras
+- Jacket water heater: bila dimatikan mesin dingin, starter lebih lama, asap putih lebih tebal
+- Air dalam solar mengisi separator; bila penuh mesin tersendat lalu mati sampai separator dikuras
+- Uji mingguan otomatis 15 menit tanpa beban dan logbook setiap kali genset jalan (lama, kWh, solar, suhu, tekanan oli, tegangan aki saat starter)
+- Uji penerimaan beban ala ISO 8528-5 dengan load bank (bertahap atau langsung 100%), perekam frekuensi dan tegangan, dip, waktu pulih, dan kelas G1/G2/G3 (batas tipikal); langkah beban besar dip lebih dalam karena turbo lag
+- Osiloskop 3 fasa (tegangan R, S, T dan arus R)
+
+### Visual
+
+- Siang atau malam, hujan dan badai; petir yang menyambar tiang PLN memicu PLN padam
+- Kamera sinematik yang mengikuti urutan PLN padam sampai gedung menyala lagi
+- Panel ATS yang bisa dibuka: kontaktor PLN dan genset, interlock mekanik, percikan saat pindah
+- Kamera termal (ironbow) dengan suhu tiap bagian dari simulasi
+- Satu silinder gerak lambat: hisap, kompresi, usaha (semprotan injektor dan nyala api), buang
+- Ruang genset dengan louver, peredam, cerobong menembus atap; pelat nama, stiker peringatan, bayangan sudut (ambient occlusion)
+- Tampilan HP untuk kedua mode
+
 ## Mode pembangkit 5 unit
 
 Tombol "Mode pembangkit 5 unit" (atau `?mode=plant`) membuka PLTD kecil: lima genset 2250 kVA berjajar di dalam hall, memasok kawasan pabrik kelapa sawit lewat jaringan 20 kV.
@@ -65,6 +90,7 @@ Spesifikasi diambil dari halaman produk Traknus, datasheet mesin dan genset 4016
 
 - Konsumsi solar tanpa beban (40 L/jam) adalah perkiraan; Perkins tidak mencantumkannya
 - Kapasitas tangki harian 2000 L adalah asumsi (unit open type tidak punya tangki bawaan)
+- Ukuran UPS gedung, tangki timbun, laju pompa transfer, model aki, dan batas kelas ISO 8528 adalah perkiraan untuk ilustrasi
 - Timer warm-up dan cooling memakai setelan pabrik DSE; perakit genset bisa mengubahnya
 - Bentuk model mengikuti foto produk, tetapi bukan gambar teknik resmi
 

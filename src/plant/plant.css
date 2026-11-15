@@ -479,4 +479,22 @@
     transform: none;
     margin: 8px 16px;
   }
+  .p-detail {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin: 8px 16px;
+  }
+  .p-cams {
+    flex-wrap: wrap;
+  }
+  .p-seats {
+    position: static;
+    margin: 0 0 6px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .plant-start {
+    font-size: 13px;
+  }
 }
