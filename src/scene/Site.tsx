@@ -6,9 +6,10 @@ import * as THREE from 'three';
 import { criticalPowered, normalPowered } from '../sim/genset';
 import { sim } from '../store';
 import { Box, Cyl, M } from './parts';
+import { useWetGround } from './Weather';
 
-export const ATS_POS: [number, number, number] = [7, 0, -4.5];
-export const POLE_POS: [number, number, number] = [13, 0, -7];
+import { ATS_POS, POLE_POS } from './sitePos';
+export { ATS_POS, POLE_POS };
 const BUILDING = { x: -1, z: -24, w: 24, h: 13, d: 10 };
 
 export const buildingPowered = () => normalPowered(sim);
@@ -214,6 +215,8 @@ export function Flow({ pts, color, on, speed = 1, width = 3 }: { pts: [number, n
 }
 
 export function Site({ panelAt }: { panelAt: [number, number, number] }) {
+  const asphalt = useWetGround('#2a2d30');
+  const pad = useWetGround('#6d7175');
   const [ax, , az] = ATS_POS;
   const [px, , pz] = POLE_POS;
   const genCable: [number, number, number][] = [panelAt, [panelAt[0], 0.05, panelAt[2]], [ax, 0.05, panelAt[2]], [ax, 0.05, az + 0.4], [ax, 0.6, az + 0.35]];
@@ -222,13 +225,11 @@ export function Site({ panelAt }: { panelAt: [number, number, number] }) {
   return (
     <group>
       {/* ground: asphalt yard, concrete pad, cable trench cover */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={asphalt}>
         <planeGeometry args={[120, 120]} />
-        <meshStandardMaterial color="#2a2d30" roughness={0.95} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow material={pad}>
         <planeGeometry args={[16, 7]} />
-        <meshStandardMaterial color="#6d7175" roughness={0.9} />
       </mesh>
       <Box s={[ax - panelAt[0] + 0.4, 0.04, 0.4]} m={M.cast} position={[(ax + panelAt[0]) / 2, 0.02, panelAt[2]]} />
       <Box s={[0.4, 0.04, Math.abs(az - panelAt[2])]} m={M.cast} position={[ax, 0.02, (az + panelAt[2]) / 2]} />

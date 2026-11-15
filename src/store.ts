@@ -16,6 +16,10 @@ interface UI {
   focus: string | null; // part the info card describes
   tour: number | null; // open chapter of the guided tour
   mode: 'single' | 'plant'; // one genset, or the five-unit power plant
+  sky: 'malam' | 'siang';
+  weather: 'cerah' | 'hujan' | 'badai';
+  cinematic: boolean; // camera follows the AMF sequence
+  plnAutoReturn: boolean; // after a lightning strike the mains comes back by itself
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
 }
@@ -30,6 +34,10 @@ export const useUI = createStore<UI>((setState) => ({
   focus: null,
   tour: null,
   mode: new URLSearchParams(location.search).get('mode') === 'plant' ? 'plant' : 'single',
+  sky: 'malam',
+  weather: 'cerah',
+  cinematic: false,
+  plnAutoReturn: true,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),
 }));

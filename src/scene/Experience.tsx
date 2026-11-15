@@ -1,7 +1,8 @@
 import { CameraControls, Environment, Lightformer } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import type * as THREE from 'three';
 import { showAlarms } from '../dse';
 import { playEvent, updateSound } from '../sound';
 import { advance, onSimEvent, sim, useUI } from '../store';
@@ -11,6 +12,7 @@ import { PANEL_POS } from './ControlPanel';
 import { Flows } from './Flows';
 import { FocusHighlight } from './FocusHighlight';
 import { FuelSystem } from './FuelSystem';
+import { Director, SkyLight, Weather } from './Weather';
 import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
 import { LoadBank } from './LoadBank';
@@ -52,6 +54,8 @@ function Intro() {
 }
 
 export function Experience() {
+  const hemi = useRef<THREE.HemisphereLight>(null);
+  const sun = useRef<THREE.DirectionalLight>(null);
   const view = useUI((s) => s.view);
   const silent = view === 'silent';
   const shift: [number, number, number] = silent ? [SILENT_SHIFT, CANOPY.base, 0] : [0, 0, 0];
@@ -66,10 +70,10 @@ export function Experience() {
   const panelWorld: [number, number, number] = [PANEL_POS[0] + shift[0], PANEL_POS[1] + shift[1], PANEL_POS[2]];
   return (
     <Canvas shadows dpr={[1, 2]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
-      <color attach="background" args={['#1b2532']} />
       <fog attach="fog" args={['#1b2532', 30, 90]} />
-      <hemisphereLight args={['#9fb6d6', '#2a2620', 0.5]} />
+      <hemisphereLight ref={hemi} args={['#9fb6d6', '#2a2620', 0.5]} />
       <directionalLight
+        ref={sun}
         position={[12, 16, 10]}
         intensity={1.6}
         color="#ffe2c0"
@@ -97,6 +101,9 @@ export function Experience() {
       {silent && <Canopy />}
       <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
       <FocusHighlight />
+      <SkyLight hemi={hemi} sun={sun} />
+      <Weather />
+      <Director />
       <FuelSystem />
       <Smoke key={view} at={stack} />
 

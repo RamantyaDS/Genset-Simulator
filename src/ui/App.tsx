@@ -176,6 +176,39 @@ function Controls() {
         </button>
       </div>
 
+      <h2>Suasana</h2>
+      <div className="row">
+        <button className={ui.sky === 'malam' ? 'on' : ''} onClick={() => ui.set({ sky: 'malam' })}>
+          🌙 Malam
+        </button>
+        <button className={ui.sky === 'siang' ? 'on' : ''} onClick={() => ui.set({ sky: 'siang' })}>
+          ☀ Siang
+        </button>
+      </div>
+      <div className="row">
+        {(
+          [
+            ['cerah', 'Cerah'],
+            ['hujan', '🌧 Hujan'],
+            ['badai', '⛈ Badai'],
+          ] as const
+        ).map(([w, l]) => (
+          <button key={w} className={ui.weather === w ? 'on' : ''} onClick={() => ui.set({ weather: w })}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {ui.weather === 'badai' && (
+        <label className="chk wide">
+          <input type="checkbox" checked={ui.plnAutoReturn} onChange={() => ui.set({ plnAutoReturn: !ui.plnAutoReturn })} /> PLN kembali sendiri ±90 dtk
+          setelah tiang tersambar petir
+        </label>
+      )}
+      <label className="chk wide">
+        <input type="checkbox" checked={ui.cinematic} onChange={() => ui.set({ cinematic: !ui.cinematic })} /> 🎬 Kamera sinematik (ikuti urutan
+        PLN padam)
+      </label>
+
       <h2>Tampilan</h2>
       <div className="row">
         <button className={ui.view === 'open' ? 'on' : ''} onClick={() => ui.set({ view: 'open' })}>
