@@ -313,6 +313,14 @@ function Controls() {
         </button>
       </div>
       <div className="row">
+        <button className={ui.room ? 'on' : ''} disabled={ui.view === 'silent'} onClick={() => ui.set({ room: !ui.room })}>
+          🏠 Ruang genset
+        </button>
+        <button className={ui.hq ? 'on' : ''} title="Bayangan sudut (ambient occlusion); matikan bila terasa berat" onClick={() => ui.set({ hq: !ui.hq })}>
+          ✨ Grafis tinggi
+        </button>
+      </div>
+      <div className="row">
         <button className={ui.view === 'open' ? 'on' : ''} onClick={() => ui.set({ view: 'open' })}>
           Open type
         </button>

@@ -26,6 +26,8 @@ interface UI {
   thermal: boolean; // thermal camera view
   cylinder: boolean; // bullet-time cylinder cutaway
   cylSpeed: number; // seconds per four-stroke cycle
+  room: boolean; // open set inside a genset room
+  hq: boolean; // ambient occlusion and other costly effects
   plnAutoReturn: boolean; // after a lightning strike the mains comes back by itself
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
@@ -51,6 +53,8 @@ export const useUI = createStore<UI>((setState) => ({
   thermal: false,
   cylinder: false,
   cylSpeed: 8,
+  room: false,
+  hq: innerWidth > 900,
   plnAutoReturn: true,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),

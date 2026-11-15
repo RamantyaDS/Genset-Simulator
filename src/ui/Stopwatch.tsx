@@ -38,6 +38,16 @@ export function Stopwatch() {
                   <b className={o.critDark > 0 ? 'bad' : 'ok'}>{sec(o.critDark)}</b>
                 </div>
               </div>
+              {o.blink > 0 && (
+                <p className="sw-blink">
+                  Kedip saat balik ke PLN: <b>{sec(o.blink)}</b>
+                  <span>
+                    Ini <i>open transition</i>: breaker genset dibuka dulu, baru breaker PLN masuk, jadi gedung padam sesaat. Supaya tanpa kedip dibutuhkan{' '}
+                    <i>closed transition</i>: genset disinkronkan dulu dengan PLN lalu paralel sebentar (kurang dari 100 ms) sebelum genset dilepas. Itu butuh ATS
+                    closed transition atau pengendali sinkron seperti DSE8610, serta izin paralel dari PLN. DSE7320 hanya open transition.
+                  </span>
+                </p>
+              )}
               <ol className="sw-steps">
                 {o.steps.map((x, i) => (
                   <li key={i}>

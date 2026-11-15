@@ -153,6 +153,7 @@ export interface State {
   exercise: number; // seconds left of a scheduled off-load exercise run, 0 none
   runs: RunLog[];
   iso: IsoTest;
+  backIn: number; // seconds until the mains breaker closes on the return transfer, −1 none
 }
 
 /** ISO 8528-5 style load-acceptance test run with the load bank, with a recorder. */
@@ -206,6 +207,7 @@ export interface Outage {
   normalDark: number; // seconds the ordinary building load had no supply
   critDark: number; // seconds the UPS-backed critical load had no supply
   normalBack: number; // seconds after the failure the ordinary load came back, −1 not yet
+  blink: number; // seconds dark during the transfer back to the mains (open transition)
   confirmed: boolean;
 }
 
@@ -256,7 +258,7 @@ export function create(): State {
     upsOn: true,
     upsCharge: 1,
     upsOnBattery: false,
-    outage: { active: false, start: 0, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false },
+    outage: { active: false, start: 0, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false, blink: 0 },
     batHealth: 1,
     batSoc: 1,
     chargerOk: true,
@@ -267,6 +269,7 @@ export function create(): State {
     exercise: 0,
     runs: [],
     iso: { active: false, plan: [], step: 0, t: 0, stepStart: 0, rec: [], results: [] },
+    backIn: -1,
   };
 }
 
@@ -399,7 +402,7 @@ const STEP_LABEL: Partial<Record<SimEvent, string>> = {
   gcbClose: 'Breaker genset masuk: gedung menyala lagi',
   mainsReturn: 'PLN kembali, tunggu return delay 30 dtk',
   gcbOpen: 'Breaker genset dibuka',
-  mcbClose: 'Breaker PLN masuk: gedung kembali ke PLN',
+  mcbClose: 'Breaker PLN masuk: gedung kembali ke PLN (open transition)',
 };
 const note = (s: State, label: string) => {
   if (s.outage.active) s.outage.steps.push({ t: s.t - s.outage.start, label });
@@ -520,7 +523,7 @@ export function setMains(s: State, ok: boolean) {
   s.mainsFailedFor = 0;
   s.mainsBackFor = 0;
   if (!ok) {
-    s.outage = { active: true, start: s.t, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false };
+    s.outage = { active: true, start: s.t, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false, blink: 0 };
     note(s, 'PLN padam: gedung gelap');
     if (s.upsOn && s.upsCharge > 0) note(s, 'UPS mengambil alih beban kritis tanpa jeda');
   }
@@ -580,8 +583,12 @@ export function step(s: State, dt: number) {
         setGcb(s, true);
       }
       if (s.mainsOk && s.mainsBackFor >= TIMERS.returnDelay && s.exercise <= 0) {
-        if (s.gcb) setGcb(s, false);
-        setMcb(s, true);
+        // Open transition: the generator breaker opens first, the mains breaker closes after the transfer time, so the
+        // building blinks for a moment. (No-break return needs a closed-transition ATS or a controller that synchronises.)
+        if (s.gcb) {
+          setGcb(s, false);
+          s.backIn = TIMERS.transfer;
+        } else setMcb(s, true);
         s.phase = 'cooling';
         s.timer = TIMERS.cooling;
       }
@@ -596,6 +603,10 @@ export function step(s: State, dt: number) {
   if (wantLoad && s.phase === 'running' && genAvailable(s) && s.warm >= TIMERS.warmup && !s.gcb && !s.alarms.includes('overloadTrip')) {
     setMcb(s, false);
     setGcb(s, true);
+  }
+  if (s.backIn >= 0) {
+    s.backIn -= dt;
+    if (s.backIn < 0 && s.mainsOk) setMcb(s, true);
   }
   if (s.transferIn >= 0) {
     s.transferIn -= dt;
@@ -714,6 +725,7 @@ export function step(s: State, dt: number) {
   const o = s.outage;
   if (o.active) {
     if (!normal) o.normalDark += dt;
+    if (!normal && o.normalBack >= 0 && s.mainsOk) o.blink += dt;
     if (!criticalPowered(s)) o.critDark += dt;
     if (normal && o.normalBack < 0) o.normalBack = s.t - o.start;
     if (s.mainsOk && s.mcb && s.phase !== 'running' && o.normalBack >= 0) o.active = false;

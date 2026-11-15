@@ -1,6 +1,6 @@
 import { CameraControls, Environment, Lightformer } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Bloom, EffectComposer } from '@react-three/postprocessing';
+import { Bloom, EffectComposer, N8AO } from '@react-three/postprocessing';
 import { useEffect, useRef } from 'react';
 import type * as THREE from 'three';
 import { showAlarms } from '../dse';
@@ -14,6 +14,7 @@ import { FocusHighlight } from './FocusHighlight';
 import { FuelSystem } from './FuelSystem';
 import { Director, SkyLight, Weather } from './Weather';
 import { ThermalView } from './Thermal';
+import { Details, GensetRoom, ROOM_STACK } from './Dressing';
 import { CylinderCutaway } from './Cylinder';
 import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
@@ -62,7 +63,9 @@ export function Experience() {
   const silent = view === 'silent';
   const shift: [number, number, number] = silent ? [SILENT_SHIFT, CANOPY.base, 0] : [0, 0, 0];
   // Hot air: exhaust rises and drifts downwind; radiator air blows out of the radiator face (or the canopy's louvred end).
-  const stack: [number, number, number] = silent ? SILENT_STACK : [0.74, 2.62, 0];
+  const room = useUI((s) => s.room) && !silent;
+  const hq = useUI((s) => s.hq);
+  const stack: [number, number, number] = silent ? SILENT_STACK : room ? ROOM_STACK : [0.74, 2.62, 0];
   const haze: HazeSources = {
     exhaust: { from: stack, to: [stack[0] + 0.9, stack[1] + 3.2, stack[2]], width: 0.45 },
     radiator: silent
@@ -97,24 +100,27 @@ export function Experience() {
       <Site panelAt={panelWorld} />
       <group position={shift}>
         <Genset />
+        <Details />
         <Flows />
         <TourHighlight />
       </group>
       {silent && <Canopy />}
       <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
       <FocusHighlight />
+      <GensetRoom />
       <SkyLight hemi={hemi} sun={sun} />
       <ThermalView />
       <CylinderCutaway />
       <Weather />
       <Director />
       <FuelSystem />
-      <Smoke key={view} at={stack} />
+      <Smoke key={`${view}${room}`} at={stack} />
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={45} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
       <Intro />
       <Driver />
       <EffectComposer>
+        {hq ? <N8AO aoRadius={1.2} intensity={2.2} distanceFalloff={0.6} halfRes /> : <></>}
         <HeatHaze sources={haze} />
         <Bloom mipmapBlur luminanceThreshold={1} intensity={0.8} />
       </EffectComposer>
