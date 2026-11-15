@@ -479,3 +479,89 @@ button:focus-visible {
     top: 200px;
   }
 }
+
+/* outage stopwatch */
+.stopwatch {
+  position: fixed;
+  top: 128px;
+  right: 16px;
+  width: 440px;
+  max-height: calc(100vh - 590px);
+  min-height: 60px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.sw-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.sw-head .x {
+  padding: 0 8px;
+}
+.sw-big {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 6px 0;
+}
+.sw-big div {
+  background: #ffffff0d;
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+}
+.sw-big span {
+  font-size: 11px;
+  color: var(--dim);
+}
+.sw-big b {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.sw-big .run {
+  color: #ffb020;
+}
+.sw-big .ok {
+  color: #6fdc8c;
+}
+.sw-big .bad {
+  color: #ff7a6a;
+}
+.sw-steps {
+  margin: 4px 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sw-steps em {
+  display: inline-block;
+  width: 48px;
+  font-style: normal;
+  color: var(--teal);
+  font-variant-numeric: tabular-nums;
+}
+.fuel-levels {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+.fuel-levels b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.stopwatch .hint {
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 4px 0;
+}

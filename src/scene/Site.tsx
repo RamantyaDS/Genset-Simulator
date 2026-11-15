@@ -3,6 +3,7 @@ import { Line, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { criticalPowered, normalPowered } from '../sim/genset';
 import { sim } from '../store';
 import { Box, Cyl, M } from './parts';
 
@@ -10,35 +11,54 @@ export const ATS_POS: [number, number, number] = [7, 0, -4.5];
 export const POLE_POS: [number, number, number] = [13, 0, -7];
 const BUILDING = { x: -1, z: -24, w: 24, h: 13, d: 10 };
 
-export const buildingPowered = () => (sim.mcb && sim.mainsOk) || (sim.gcb && sim.volts > 300);
+export const buildingPowered = () => normalPowered(sim);
+
+// Windows: the stairwell column (emergency lighting) and the server room on the second floor are on the UPS; the
+// rest is ordinary load. Ordinary floors go dark at once and come back one floor after another.
+const COLS = 16;
+const ROWS = 4;
+const isCritical = (r: number, c: number) => c === 0 || (r === 1 && c >= 10 && c <= 12);
+
+function windowMesh(cells: [number, number][], color: string) {
+  const geo = new THREE.PlaneGeometry(0.9, 1.1);
+  const mat = new THREE.MeshStandardMaterial({ color: '#0e1318', emissive: color, emissiveIntensity: 0, roughness: 0.2, metalness: 0.6 });
+  const mesh = new THREE.InstancedMesh(geo, mat, cells.length);
+  const m = new THREE.Matrix4();
+  cells.forEach(([r, c], i) => {
+    m.setPosition(BUILDING.x - BUILDING.w / 2 + 1.0 + c * ((BUILDING.w - 2) / (COLS - 1)), 1.8 + r * 3, BUILDING.z + BUILDING.d / 2 + 0.01);
+    mesh.setMatrixAt(i, m);
+    // a few offices left dark even when powered
+    mesh.setColorAt(i, new THREE.Color(c === 0 || (c * 7 + r * 3) % 5 !== 0 ? '#ffffff' : '#000000'));
+  });
+  return mesh;
+}
 
 function Building() {
-  const cols = 16;
-  const rows = 4;
-  const { mesh, lit } = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(0.9, 1.1);
-    const mat = new THREE.MeshStandardMaterial({ color: '#0e1318', emissive: '#ffd59a', emissiveIntensity: 0, roughness: 0.2, metalness: 0.6 });
-    const mesh = new THREE.InstancedMesh(geo, mat, cols * rows);
-    const m = new THREE.Matrix4();
-    const lit: boolean[] = [];
-    let i = 0;
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++) {
-        m.setPosition(BUILDING.x - BUILDING.w / 2 + 1.0 + c * ((BUILDING.w - 2) / (cols - 1)), 1.8 + r * 3, BUILDING.z + BUILDING.d / 2 + 0.01);
-        mesh.setMatrixAt(i, m);
-        lit.push((c * 7 + r * 3) % 5 !== 0);
-        mesh.setColorAt(i, new THREE.Color(lit[i] ? '#ffffff' : '#000000'));
-        i++;
-      }
-    return { mesh, lit };
+  const { floors, crit, server } = useMemo(() => {
+    const floors = Array.from({ length: ROWS }, (_, r) =>
+      windowMesh(
+        Array.from({ length: COLS }, (_, c) => [r, c] as [number, number]).filter(([rr, c]) => !isCritical(rr, c)),
+        '#ffd59a',
+      ),
+    );
+    const stair = Array.from({ length: ROWS }, (_, r) => [r, 0] as [number, number]);
+    return { floors, crit: windowMesh(stair, '#e8fff0'), server: windowMesh([10, 11, 12].map((c) => [1, c] as [number, number]), '#7fc4ff') };
   }, []);
-  const level = useRef(1);
+  const level = useRef(new Array(ROWS).fill(1));
+  const since = useRef(0);
   useFrame((_, dt) => {
-    const on = buildingPowered() ? 1 : 0;
-    level.current += (on - level.current) * Math.min(1, dt * (on ? 6 : 25));
-    (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = level.current * 0.85;
+    const on = normalPowered(sim);
+    since.current = on ? since.current + dt : 0;
+    floors.forEach((f, r) => {
+      // floors come back one by one (contactors per floor), and drop out together
+      const want = on && since.current > r * 0.45 ? 1 : 0;
+      level.current[r] += (want - level.current[r]) * Math.min(1, dt * (want ? 6 : 25));
+      (f.material as THREE.MeshStandardMaterial).emissiveIntensity = level.current[r] * 0.85;
+    });
+    const c = criticalPowered(sim);
+    (crit.material as THREE.MeshStandardMaterial).emissiveIntensity = c ? (on ? 0.85 : 0.6) : 0;
+    (server.material as THREE.MeshStandardMaterial).emissiveIntensity = c ? 1.3 : 0;
   });
-  void lit;
   return (
     <group>
       <Box s={[BUILDING.w, BUILDING.h, BUILDING.d]} m={M.canopyDark} position={[BUILDING.x, BUILDING.h / 2, BUILDING.z]} />
@@ -46,9 +66,65 @@ function Building() {
       {[1, 2, 3].map((r) => (
         <Box key={r} s={[BUILDING.w, 0.12, 0.1]} m={M.base} position={[BUILDING.x, r * 3 + 0.2, BUILDING.z + BUILDING.d / 2 + 0.05]} />
       ))}
-      <primitive object={mesh} />
+      {floors.map((f, r) => (
+        <primitive key={r} object={f} />
+      ))}
+      <primitive object={crit} />
+      <primitive object={server} />
       <Text position={[BUILDING.x, BUILDING.h - 0.9, BUILDING.z + BUILDING.d / 2 + 0.05]} fontSize={0.7} color="#cfd6dc" anchorX="center">
         GEDUNG KANTOR
+      </Text>
+      <Text position={[BUILDING.x - 1.4, 7.6, BUILDING.z + BUILDING.d / 2 + 0.05]} fontSize={0.32} color="#7fc4ff" anchorX="center">
+        RUANG SERVER (UPS)
+      </Text>
+    </group>
+  );
+}
+
+/** Building UPS beside the ATS: inverter cabinet with a status display and a battery cabinet. */
+function UpsCabinet() {
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 64;
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return { c, t };
+  }, []);
+  const last = useRef(0);
+  const led = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame(({ clock }) => {
+    const col = !sim.upsOn ? '#3a3d40' : sim.upsCharge === 0 ? '#ff3b30' : sim.upsOnBattery ? (Math.floor(clock.elapsedTime * 2.5) % 2 ? '#ffb020' : '#553300') : '#39d353';
+    led.current!.color.set(col);
+    led.current!.emissive.set(col);
+    if (clock.elapsedTime - last.current < 0.25) return;
+    last.current = clock.elapsedTime;
+    const g = tex.c.getContext('2d')!;
+    g.fillStyle = '#0b1610';
+    g.fillRect(0, 0, 256, 64);
+    g.fillStyle = sim.upsOnBattery ? '#ffb020' : '#7fe08a';
+    g.font = 'bold 26px monospace';
+    g.textAlign = 'center';
+    g.fillText(!sim.upsOn ? 'UPS OFF' : sim.upsOnBattery ? `BATERAI ${Math.round(sim.upsCharge * 100)}%` : `ONLINE ${Math.round(sim.upsCharge * 100)}%`, 128, 42);
+    tex.t.needsUpdate = true;
+  });
+  return (
+    <group position={[ATS_POS[0] + 2.1, 0, ATS_POS[2]]}>
+      <Box s={[0.8, 1.9, 0.7]} r={0.02} m={M.white} position={[0, 0.95, 0]} />
+      <Box s={[1.1, 1.6, 0.7]} r={0.02} m={M.canopyDark} position={[1.0, 0.8, 0]} />
+      <mesh position={[0, 1.45, 0.36]}>
+        <planeGeometry args={[0.6, 0.15]} />
+        <meshBasicMaterial map={tex.t} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 1.2, 0.36]}>
+        <circleGeometry args={[0.04, 16]} />
+        <meshStandardMaterial ref={led} color="#39d353" emissive="#39d353" emissiveIntensity={2.5} />
+      </mesh>
+      <Text position={[0, 1.7, 0.36]} fontSize={0.1} color="#1b2228">
+        UPS 80 kVA
+      </Text>
+      <Text position={[1.0, 1.4, 0.36]} fontSize={0.08} color="#cfd6dc">
+        BATERAI 30 kWh
       </Text>
     </group>
   );
@@ -159,6 +235,7 @@ export function Site({ panelAt }: { panelAt: [number, number, number] }) {
       <Building />
       <Pole />
       <AtsCabinet />
+      <UpsCabinet />
       {/* static cables */}
       <Line points={plnCable} color="#111" lineWidth={2} />
       <Line points={bldCable} color="#111" lineWidth={2} />

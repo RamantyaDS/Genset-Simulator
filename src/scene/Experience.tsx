@@ -10,6 +10,7 @@ import { Canopy, CANOPY, SILENT_STACK } from './Canopy';
 import { PANEL_POS } from './ControlPanel';
 import { Flows } from './Flows';
 import { FocusHighlight } from './FocusHighlight';
+import { FuelSystem } from './FuelSystem';
 import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
 import { LoadBank } from './LoadBank';
@@ -96,6 +97,7 @@ export function Experience() {
       {silent && <Canopy />}
       <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
       <FocusHighlight />
+      <FuelSystem />
       <Smoke key={view} at={stack} />
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={45} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />

@@ -41,6 +41,15 @@ export const TIMERS = {
 };
 
 export const TANK_L = 2000; // day tank; the open set has no base tank, so this is an assumption
+export const BULK_L = 10000; // underground bulk tank feeding the day tank (assumption)
+export const PUMP_LPH = 1500; // transfer pump
+export const UPS = { kw: 60, kwh: 30 }; // building UPS: server room, emergency lighting, lift controls, CCTV (assumption)
+
+/** One line of the outage timeline: seconds after the mains failed, and what happened. */
+export interface Step {
+  t: number;
+  label: string;
+}
 
 export type Mode = 'stop' | 'manual' | 'test' | 'auto';
 export type Phase =
@@ -119,6 +128,26 @@ export interface State {
   faultRadiator: boolean; // blocked radiator / slipping fan belt: coolant overheats
   faultOil: boolean; // oil leak: pressure falls
   events: SimEvent[];
+  t: number; // simulated seconds since start
+  bulk: number; // litres in the bulk tank
+  pumpAuto: boolean; // transfer pump on its level switch
+  pumping: boolean;
+  truckIn: number; // seconds until the tanker has finished filling the bulk tank, −1 none
+  upsOn: boolean; // building UPS installed and switched on
+  upsCharge: number; // 0..1
+  upsOnBattery: boolean;
+  outage: Outage;
+}
+
+/** Stopwatch of the last mains failure: what happened when, and how long each kind of load was dark. */
+export interface Outage {
+  active: boolean;
+  start: number;
+  steps: Step[];
+  normalDark: number; // seconds the ordinary building load had no supply
+  critDark: number; // seconds the UPS-backed critical load had no supply
+  normalBack: number; // seconds after the failure the ordinary load came back, −1 not yet
+  confirmed: boolean;
 }
 
 export function create(): State {
@@ -160,8 +189,22 @@ export function create(): State {
     faultRadiator: false,
     faultOil: false,
     events: [],
+    t: 0,
+    bulk: BULK_L * 0.7,
+    pumpAuto: true,
+    pumping: false,
+    truckIn: -1,
+    upsOn: true,
+    upsCharge: 1,
+    upsOnBattery: false,
+    outage: { active: false, start: 0, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false },
   };
 }
+
+/** The building's ordinary load has supply: through the mains breaker, or through the generator breaker. */
+export const normalPowered = (s: State) => (s.mcb && s.mainsOk) || (s.gcb && s.volts > 300);
+/** The critical load: ordinary supply, or the UPS battery. */
+export const criticalPowered = (s: State) => normalPowered(s) || (s.upsOn && s.upsCharge > 0);
 
 // ---------- derived readings ----------
 
@@ -218,7 +261,24 @@ export function statusText(s: State): [string, string] {
 
 // ---------- operator actions ----------
 
-const emit = (s: State, e: SimEvent) => s.events.push(e);
+const STEP_LABEL: Partial<Record<SimEvent, string>> = {
+  starterOn: 'Starter menyala',
+  fire: 'Mesin mulai hidup (pembakaran)',
+  starterOff: 'Starter lepas',
+  mcbOpen: 'Breaker PLN dibuka',
+  gcbClose: 'Breaker genset masuk: gedung menyala lagi',
+  mainsReturn: 'PLN kembali, tunggu return delay 30 dtk',
+  gcbOpen: 'Breaker genset dibuka',
+  mcbClose: 'Breaker PLN masuk: gedung kembali ke PLN',
+};
+const note = (s: State, label: string) => {
+  if (s.outage.active) s.outage.steps.push({ t: s.t - s.outage.start, label });
+};
+const emit = (s: State, e: SimEvent) => {
+  s.events.push(e);
+  const label = STEP_LABEL[e];
+  if (label) note(s, e === 'starterOn' ? `${label} (percobaan ${s.attempt})` : label);
+};
 const raise = (s: State, a: AlarmId) => {
   if (s.alarms.includes(a)) return;
   s.alarms.push(a);
@@ -329,7 +389,23 @@ export function setMains(s: State, ok: boolean) {
   s.mainsOk = ok;
   s.mainsFailedFor = 0;
   s.mainsBackFor = 0;
+  if (!ok) {
+    s.outage = { active: true, start: s.t, steps: [], normalDark: 0, critDark: 0, normalBack: -1, confirmed: false };
+    note(s, 'PLN padam: gedung gelap');
+    if (s.upsOn && s.upsCharge > 0) note(s, 'UPS mengambil alih beban kritis tanpa jeda');
+  }
   emit(s, ok ? 'mainsReturn' : 'mainsFail');
+}
+
+/** Call the fuel tanker: it fills the bulk tank after about 20 seconds. */
+export function callTanker(s: State) {
+  if (s.truckIn < 0) s.truckIn = 20;
+}
+
+/** Drain both tanks (fault drill: theft or a leak). */
+export function drainFuel(s: State) {
+  s.fuel = 0;
+  s.bulk = 0;
 }
 
 /** Runtime left on the tank at the present burn rate, in hours (Infinity when not burning). */
@@ -337,6 +413,7 @@ export const hoursLeft = (s: State) => (fuelRate(s) > 0 ? s.fuel / fuelRate(s) :
 
 export function refuel(s: State) {
   s.fuel = TANK_L;
+  s.bulk = BULK_L;
   clear(s, 'lowFuel');
 }
 
@@ -344,6 +421,7 @@ export function refuel(s: State) {
 
 export function step(s: State, dt: number) {
   const prevKw = s.genKw;
+  s.t += dt;
 
   // Mains supervision.
   if (s.mainsOk) {
@@ -352,6 +430,10 @@ export function step(s: State, dt: number) {
   } else {
     s.mainsBackFor = 0;
     s.mainsFailedFor += dt;
+  }
+  if (s.outage.active && !s.outage.confirmed && s.mainsFailedFor >= TIMERS.mainsTransient && !s.mainsOk) {
+    s.outage.confirmed = true;
+    note(s, `PLN padam terkonfirmasi (${TIMERS.mainsTransient} dtk), start delay ${TIMERS.startDelay} dtk`);
   }
   // A dead mains breaker can't stay closed onto a dead bus in auto.
   if (!s.mainsOk && s.mcb && s.mainsFailedFor >= TIMERS.mainsTransient && s.mode !== 'stop') setMcb(s, false);
@@ -464,6 +546,24 @@ export function step(s: State, dt: number) {
   s.dipV += -s.dipV * Math.min(1, dt / 0.45);
   if (s.firing && s.rpm > 1350) s.rpm = RATING.rpm * (1 + s.dipF);
 
+  // Building UPS and the outage stopwatch.
+  const normal = normalPowered(s);
+  if (!normal && s.upsOn && s.upsCharge > 0) {
+    s.upsOnBattery = true;
+    s.upsCharge = Math.max(0, s.upsCharge - ((UPS.kw / UPS.kwh) * dt) / 3600);
+    if (s.upsCharge === 0) note(s, 'Baterai UPS habis: beban kritis padam');
+  } else {
+    s.upsOnBattery = false;
+    if (normal && s.upsCharge < 1) s.upsCharge = Math.min(1, s.upsCharge + dt / (4 * 3600)); // ~4 h recharge
+  }
+  const o = s.outage;
+  if (o.active) {
+    if (!normal) o.normalDark += dt;
+    if (!criticalPowered(s)) o.critDark += dt;
+    if (normal && o.normalBack < 0) o.normalBack = s.t - o.start;
+    if (s.mainsOk && s.mcb && s.phase !== 'running' && o.normalBack >= 0) o.active = false;
+  }
+
   // Excitation: the AVR builds voltage once the alternator is near speed.
   const vTarget = s.rpm > 1100 ? RATING.volts * Math.min(1, s.rpm / RATING.rpm) * (1 + s.dipV) : s.rpm > 300 ? 12 : 0;
   s.volts += (vTarget - s.volts) * Math.min(1, dt / 0.6);
@@ -487,6 +587,20 @@ export function step(s: State, dt: number) {
   s.oil += (oilTarget - s.oil) * Math.min(1, dt / (s.faultOil ? 6 : 0.8));
   const batTarget = s.starter ? 19.6 : s.firing && s.rpm > 900 ? 27.6 : 25.6;
   s.battery += (batTarget - s.battery) * Math.min(1, dt / (s.starter ? 0.15 : 2));
+
+  // Transfer pump: level switch on the day tank, fuel from the bulk tank; the tanker refills the bulk tank.
+  if (s.pumpAuto && s.fuel < TANK_L * 0.6 && s.bulk > 0) s.pumping = true;
+  if (!s.pumpAuto || s.fuel >= TANK_L * 0.95 || s.bulk <= 0) s.pumping = false;
+  if (s.pumping) {
+    const move = Math.min((PUMP_LPH * dt) / 3600, s.bulk, TANK_L - s.fuel);
+    s.fuel += move;
+    s.bulk -= move;
+    if (s.fuel > TANK_L * 0.1) clear(s, 'lowFuel');
+  }
+  if (s.truckIn >= 0) {
+    s.truckIn -= dt;
+    if (s.truckIn < 0) s.bulk = BULK_L;
+  }
 
   // Fuel and counters.
   if (s.firing) {

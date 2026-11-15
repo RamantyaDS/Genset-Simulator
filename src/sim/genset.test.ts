@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TIMERS, create, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
+import { BULK_L, TANK_L, TIMERS, callTanker, create, drainFuel, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
 
 const run = (s: State, seconds: number, dt = 0.05) => {
   for (let t = 0; t < seconds; t += dt) step(s, dt);
@@ -52,6 +52,7 @@ describe('auto mains failure', () => {
   it('gives up after three crank attempts without fuel', () => {
     const s = create();
     s.fuel = 0;
+    s.bulk = 0; // nothing for the transfer pump either
     setMains(s, false);
     run(s, 2 + TIMERS.startDelay + 3 * TIMERS.crank + 2 * TIMERS.crankRest + 2);
     expect(s.alarms).toContain('failStart');
@@ -202,5 +203,42 @@ describe('restarting', () => {
     run(s, 25);
     expect(s.alarms).toEqual([]);
     expect(genAvailable(s)).toBe(true);
+  });
+});
+
+describe('building UPS, outage stopwatch and fuel transfer', () => {
+  const runFor = (s: ReturnType<typeof create>, sec: number) => {
+    for (let t = 0; t < sec; t += 0.02) step(s, 0.02);
+  };
+
+  it('times the dark gap of a mains failure; the UPS keeps the critical load lit', () => {
+    const s = create();
+    setMains(s, false);
+    runFor(s, 40);
+    const o = s.outage;
+    expect(o.normalBack).toBeGreaterThan(8);
+    expect(o.normalBack).toBeLessThan(25);
+    expect(o.normalDark).toBeCloseTo(o.normalBack, 0);
+    expect(o.critDark).toBe(0);
+    expect(o.steps.map((x) => x.label).join('|')).toContain('Breaker genset masuk');
+
+    const n = create();
+    n.upsOn = false;
+    setMains(n, false);
+    runFor(n, 40);
+    expect(n.outage.critDark).toBeCloseTo(n.outage.normalDark, 1);
+  });
+
+  it('the transfer pump tops up the day tank from the bulk tank; the tanker refills the bulk', () => {
+    const s = create();
+    s.fuel = TANK_L * 0.5;
+    const bulk = s.bulk;
+    runFor(s, 60);
+    expect(s.fuel).toBeGreaterThan(TANK_L * 0.5);
+    expect(s.bulk).toBeLessThan(bulk);
+    drainFuel(s);
+    callTanker(s);
+    runFor(s, 25);
+    expect(s.bulk).toBeGreaterThan(BULK_L * 0.99); // the pump is already drawing from it
   });
 });

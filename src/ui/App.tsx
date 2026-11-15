@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Experience } from '../scene/Experience';
 import { goTo, setInset, type Preset } from '../scene/camera';
 import { FLOW_COLORS } from '../scene/Flows';
-import { RATING, TANK_L, amps, fuelRate, genAvailable, hoursLeft, hz, loadFrac, refuel, setEStop, setMains } from '../sim/genset';
+import { BULK_L, RATING, TANK_L, amps, callTanker, drainFuel, fuelRate, genAvailable, hoursLeft, hz, loadFrac, setEStop, setMains } from '../sim/genset';
+import { Stopwatch } from './Stopwatch';
 import { sequence } from '../dse';
 import { initSound, setSound } from '../sound';
 import { sim, useUI } from '../store';
@@ -54,6 +55,8 @@ function Controls() {
     ['panel', 'Panel'],
     ['engine', 'Mesin'],
     ['radiator', 'Radiator'],
+    ['fuel', 'Tangki'],
+    ['ups', 'ATS & UPS'],
     ['site', 'Lokasi'],
   ];
   return (
@@ -135,12 +138,34 @@ function Controls() {
         />
       </label>
 
+      <h2>Solar</h2>
+      <div className="fuel-levels">
+        <span>Tangki harian</span>
+        <b>
+          {Math.round(sim.fuel).toLocaleString('id')} / {TANK_L.toLocaleString('id')} L
+        </b>
+        <span>Tangki timbun</span>
+        <b>
+          {Math.round(sim.bulk).toLocaleString('id')} / {BULK_L.toLocaleString('id')} L
+        </b>
+        <span>Pompa transfer</span>
+        <b>{sim.pumping ? 'mengisi tangki harian' : sim.pumpAuto ? 'siaga (auto)' : 'mati'}</b>
+      </div>
+      <div className="row">
+        <button className={sim.pumpAuto ? 'on' : ''} onClick={() => (sim.pumpAuto = !sim.pumpAuto)}>
+          Pompa {sim.pumpAuto ? 'auto' : 'mati'}
+        </button>
+        <button disabled={sim.truckIn >= 0} onClick={() => callTanker(sim)}>
+          {sim.truckIn >= 0 ? `Truk mengisi… ${Math.ceil(sim.truckIn)} dtk` : '⛽ Panggil truk solar'}
+        </button>
+      </div>
+
       <h2>Gangguan</h2>
       <div className="row">
         <button className={sim.eStop ? 'on danger' : ''} onClick={() => setEStop(sim, !sim.eStop)}>
           {sim.eStop ? 'Lepas E-stop' : '🛑 Emergency stop'}
         </button>
-        <button onClick={() => (sim.fuel > 0 ? (sim.fuel = 0) : refuel(sim))}>{sim.fuel > 0 ? 'Kuras solar' : '⛽ Isi solar'}</button>
+        <button onClick={() => drainFuel(sim)}>Kuras solar</button>
       </div>
       <div className="row">
         <button className={sim.faultRadiator ? 'on danger' : ''} onClick={() => (sim.faultRadiator = !sim.faultRadiator)}>
@@ -264,6 +289,7 @@ export function App() {
         )}
       </header>
       <Gauges />
+      {tour === null && !narrow && <Stopwatch />}
       {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
       {panelOpen && !(narrow && tour !== null) && <DsePanel />}
       <PartCard />
