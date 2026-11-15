@@ -152,7 +152,37 @@ export interface State {
   water: number; // water in the separator bowl, 1 = full
   exercise: number; // seconds left of a scheduled off-load exercise run, 0 none
   runs: RunLog[];
+  iso: IsoTest;
 }
+
+/** ISO 8528-5 style load-acceptance test run with the load bank, with a recorder. */
+export interface IsoTest {
+  active: boolean;
+  plan: number[]; // load steps as fractions of prime power
+  step: number; // index of the current step
+  t: number; // seconds into the test
+  stepStart: number;
+  rec: { t: number; hz: number; v: number; kw: number }[];
+  results: IsoResult[];
+}
+
+export interface IsoResult {
+  fromKw: number;
+  toKw: number;
+  fDip: number; // % below 50 Hz
+  fRec: number; // s to get back within ±1 %
+  vDip: number; // % below 400 V
+  vRec: number; // s to get back within ±3 %
+  cls: 'G3' | 'G2' | 'G1' | '-';
+}
+
+/** Typical ISO 8528-5 limits for a load increase: transient dip and recovery time, frequency and voltage. */
+export const ISO_LIMITS = {
+  G3: { f: 7, tf: 3, v: 15, tv: 4 },
+  G2: { f: 10, tf: 5, v: 20, tv: 6 },
+  G1: { f: 15, tf: 10, v: 25, tv: 10 },
+} as const;
+export const ISO_STEP_S = 15;
 
 /** One line of the engine logbook. */
 export interface RunLog {
@@ -236,7 +266,48 @@ export function create(): State {
     water: 0.05,
     exercise: 0,
     runs: [],
+    iso: { active: false, plan: [], step: 0, t: 0, stepStart: 0, rec: [], results: [] },
   };
+}
+
+/** Start the load-acceptance test: the set must be running, off the building, ready to take load. */
+export function startIsoTest(s: State, direct: boolean) {
+  if (!genAvailable(s) || s.gcb || s.iso.active) return false;
+  s.iso = { active: true, plan: direct ? [0, 1] : [0, 0.25, 0.5, 0.75, 1], step: 0, t: 0, stepStart: 0, rec: [], results: [] };
+  s.loadBankOn = true;
+  s.loadBankKw = 0;
+  return true;
+}
+
+export function stopIsoTest(s: State) {
+  s.iso.active = false;
+  s.loadBankOn = false;
+}
+
+function judge(fDip: number, fRec: number, vDip: number, vRec: number): IsoResult['cls'] {
+  for (const c of ['G3', 'G2', 'G1'] as const) {
+    const l = ISO_LIMITS[c];
+    if (fDip <= l.f && fRec <= l.tf && vDip <= l.v && vRec <= l.tv) return c;
+  }
+  return '-';
+}
+
+/** Evaluate the recording since the last step change. */
+function evalStep(s: State, fromKw: number, toKw: number) {
+  const r = s.iso.rec.filter((x) => x.t >= s.iso.stepStart);
+  if (!r.length) return;
+  const fMin = Math.min(...r.map((x) => x.hz));
+  const vMin = Math.min(...r.map((x) => x.v));
+  const lastOut = (ok: (x: (typeof r)[number]) => boolean) => {
+    let t = s.iso.stepStart;
+    for (const x of r) if (!ok(x)) t = x.t;
+    return t - s.iso.stepStart;
+  };
+  const fDip = Math.max(0, ((RATING.hz - fMin) / RATING.hz) * 100);
+  const vDip = Math.max(0, ((RATING.volts - vMin) / RATING.volts) * 100);
+  const fRec = lastOut((x) => Math.abs(x.hz - RATING.hz) <= RATING.hz * 0.01);
+  const vRec = lastOut((x) => Math.abs(x.v - RATING.volts) <= RATING.volts * 0.03);
+  s.iso.results.push({ fromKw, toKw, fDip, fRec, vDip, vRec, cls: judge(fDip, fRec, vDip, vRec) });
 }
 
 export const EXERCISE_S = 15 * 60;
@@ -592,13 +663,18 @@ export function step(s: State, dt: number) {
   if (s.phase === 'stopping' && s.rpm === 0) s.phase = 'rest';
 
   // Load: the building through the generator breaker, plus the load bank when it is switched in.
-  if (s.loadBankOn && !genAvailable(s) && s.sinceStart > TIMERS.safety + 5) s.loadBankOn = false;
-  s.genKw = s.firing ? (s.gcb ? s.demandKw : 0) + (s.loadBankOn && genAvailable(s) ? s.loadBankKw : 0) : 0;
+  // During the ISO test the bank stays connected through the dip (that is what is being measured).
+  const bankIn = s.loadBankOn && (genAvailable(s) || (s.iso.active && s.firing));
+  if (s.loadBankOn && !bankIn && s.sinceStart > TIMERS.safety + 5) s.loadBankOn = false;
+  s.genKw = s.firing ? (s.gcb ? s.demandKw : 0) + (bankIn ? s.loadBankKw : 0) : 0;
   const stepFrac = (s.genKw - prevKw) / RATING.primeKw;
   if (Math.abs(stepFrac) > 0.001) {
     // Governor and AVR react to a load step: speed and voltage sag, then recover (ISO 8528 G2-like).
-    s.dipFv -= stepFrac * 0.32;
-    s.dipV -= stepFrac * 0.16;
+    // Big load steps hit harder than in proportion: the turbochargers need time to spool up (turbo lag), so a large
+    // turbocharged engine takes load best in steps.
+    const lag = stepFrac > 0 ? 1 + 1.6 * Math.max(0, stepFrac - 0.3) : 1;
+    s.dipFv -= stepFrac * 0.32 * lag;
+    s.dipV -= stepFrac * 0.16 * (stepFrac > 0 ? 1 + 0.5 * Math.max(0, stepFrac - 0.3) : 1);
   }
   const w = 2.6;
   const z = 0.55;
@@ -606,6 +682,24 @@ export function step(s: State, dt: number) {
   s.dipF += s.dipFv * dt;
   s.dipV += -s.dipV * Math.min(1, dt / 0.45);
   if (s.firing && s.rpm > 1350) s.rpm = RATING.rpm * (1 + s.dipF);
+
+  // ISO 8528 load-acceptance test: steps the load bank, records frequency and voltage, judges each step.
+  const iso = s.iso;
+  if (iso.active) {
+    iso.t += dt;
+    iso.rec.push({ t: iso.t, hz: hz(s), v: s.volts, kw: s.genKw });
+    if (!genAvailable(s) && iso.t > 1 && s.genKw === 0 && !s.firing) stopIsoTest(s);
+    else if (iso.t - iso.stepStart >= ISO_STEP_S || (iso.step === 0 && iso.t >= 3)) {
+      const from = iso.plan[iso.step] * RATING.primeKw;
+      if (iso.step > 0) evalStep(s, iso.plan[iso.step - 1] * RATING.primeKw, from);
+      iso.step++;
+      if (iso.step >= iso.plan.length) stopIsoTest(s);
+      else {
+        iso.stepStart = iso.t;
+        s.loadBankKw = iso.plan[iso.step] * RATING.primeKw;
+      }
+    }
+  }
 
   // Building UPS and the outage stopwatch.
   const normal = normalPowered(s);

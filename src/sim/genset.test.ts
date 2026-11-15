@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BULK_L, EXERCISE_S, TANK_L, TIMERS, callTanker, create, drainFuel, drainSeparator, startExercise, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
+import { BULK_L, EXERCISE_S, TANK_L, TIMERS, callTanker, create, drainFuel, drainSeparator, startExercise, startIsoTest, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
 
 const run = (s: State, seconds: number, dt = 0.05) => {
   for (let t = 0; t < seconds; t += dt) step(s, dt);
@@ -291,5 +291,29 @@ describe('battery, jacket heater, water in fuel, exercise and logbook', () => {
     expect(r.end).toBeGreaterThan(r.start + EXERCISE_S - 5);
     expect(r.kwh).toBe(0);
     expect(r.minOil).toBeGreaterThan(3);
+  });
+});
+
+describe('ISO 8528 load acceptance', () => {
+  const ready = () => {
+    const s = create();
+    pressManual(s);
+    pressStart(s);
+    for (let t = 0; t < 30; t += 0.02) step(s, 0.02);
+    return s;
+  };
+  it('small steps pass the strictest class; one full step dips deeper', () => {
+    const s = ready();
+    expect(startIsoTest(s, false)).toBe(true);
+    for (let t = 0; t < 75; t += 0.02) step(s, 0.02);
+    expect(s.iso.active).toBe(false);
+    expect(s.iso.results.length).toBe(4);
+    expect(s.iso.results.every((r) => r.cls === 'G3')).toBe(true);
+    const d = ready();
+    startIsoTest(d, true);
+    for (let t = 0; t < 25; t += 0.02) step(d, 0.02);
+    const r = d.iso.results[0];
+    expect(r.fDip).toBeGreaterThan(s.iso.results[0].fDip * 2);
+    expect(['G2', 'G1']).toContain(r.cls);
   });
 });

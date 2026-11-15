@@ -1,10 +1,12 @@
 // The surroundings that make the story readable: the building the genset backs up, the PLN pole, the ATS cabinet and the cables.
 import { Line, Text } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { criticalPowered, normalPowered } from '../sim/genset';
-import { sim } from '../store';
+import { arcSound } from '../sound';
+import { onSimEvent, sim, useUI } from '../store';
+import { goTo } from './camera';
 import { Box, Cyl, M } from './parts';
 import { useWetGround } from './Weather';
 
@@ -132,12 +134,12 @@ function UpsCabinet() {
         BATERAI 30 kWh
       </Text>
       {/* genset starter-battery charger, fed from the mains */}
-      <Box s={[0.45, 0.55, 0.2]} r={0.01} m={M.white} position={[-1.35, 1.35, 0.25]} />
-      <mesh position={[-1.35, 1.48, 0.355]}>
+      <Box s={[0.45, 0.55, 0.2]} r={0.01} m={M.white} position={[1.0, 1.88, 0.1]} />
+      <mesh position={[1.0, 2.01, 0.205]}>
         <circleGeometry args={[0.03, 16]} />
         <meshStandardMaterial ref={chg} color="#39d353" emissive="#39d353" emissiveIntensity={2.5} />
       </mesh>
-      <Text position={[-1.35, 1.32, 0.355]} fontSize={0.045} color="#1b2228">
+      <Text position={[1.0, 1.85, 0.205]} fontSize={0.045} color="#1b2228">
         {`CHARGER AKI
 24 V`}
       </Text>
@@ -166,34 +168,178 @@ function Pole() {
   );
 }
 
+/** One contactor: body, a moving contact carrier (pulled in when closed) and a red/green position flag. */
+function Contactor({ x, label, closed }: { x: number; label: string; closed: () => boolean }) {
+  const carrier = useRef<THREE.Group>(null);
+  const flag = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame((_, dt) => {
+    const on = closed();
+    const g = carrier.current!;
+    // snaps in fast (coil pulls), drops out a bit slower (spring)
+    g.position.z += ((on ? 0.0 : 0.06) - g.position.z) * Math.min(1, dt * (on ? 40 : 25));
+    flag.current!.color.set(on ? '#d23a2c' : '#2fb36b');
+    flag.current!.emissive.set(on ? '#d23a2c' : '#2fb36b');
+  });
+  return (
+    <group position={[x, 1.15, -0.05]}>
+      <Box s={[0.42, 0.55, 0.22]} r={0.01} m={M.greyLight} />
+      <group ref={carrier} position={[0, 0, 0.06]}>
+        <Box s={[0.36, 0.12, 0.08]} m={M.black} position={[0, 0.08, 0.13]} />
+        <mesh position={[0, 0.08, 0.175]}>
+          <boxGeometry args={[0.08, 0.05, 0.01]} />
+          <meshStandardMaterial ref={flag} color="#2fb36b" emissive="#2fb36b" emissiveIntensity={1.2} />
+        </mesh>
+      </group>
+      {/* three poles of copper above and below */}
+      {[-0.12, 0, 0.12].map((dx) => (
+        <group key={dx}>
+          <Box s={[0.03, 0.35, 0.02]} m={M.copper} position={[dx, 0.45, 0]} />
+          <Box s={[0.03, 0.35, 0.02]} m={M.copper} position={[dx, -0.45, 0]} />
+        </group>
+      ))}
+      <Text position={[0, -0.18, 0.12]} fontSize={0.045} color="#1b2228">
+        {label}
+      </Text>
+    </group>
+  );
+}
+
+/** Sparks and a flash at a contactor when it makes or breaks under load (only seen with the door open). */
+function ContactArcs() {
+  const N = 120;
+  const { geo, sparks } = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    return { geo, sparks: Array.from({ length: N }, () => ({ p: new THREE.Vector3(0, -99, 0), v: new THREE.Vector3(), life: 0 })) };
+  }, []);
+  const light = useRef<THREE.PointLight>(null);
+  const until = useRef(0);
+  useEffect(
+    () =>
+      onSimEvent((e) => {
+        if (!useUI.getState().atsOpen) return;
+        const x = e === 'mcbOpen' || e === 'mcbClose' ? 0.35 : e === 'gcbOpen' || e === 'gcbClose' ? -0.35 : null;
+        if (x === null) return;
+        const at = new THREE.Vector3(x, 1.25, 0.15);
+        light.current!.position.copy(at);
+        until.current = performance.now() + 140;
+        let n = 0;
+        for (const sp of sparks) {
+          if (sp.life > 0 || n > 40) continue;
+          sp.p.copy(at);
+          sp.v.set((Math.random() - 0.5) * 2.5, Math.random() * 2, Math.random() * 2);
+          sp.life = 0.3 + Math.random() * 0.4;
+          n++;
+        }
+        arcSound();
+      }),
+    [sparks],
+  );
+  useFrame((_, raw) => {
+    const dt = Math.min(raw, 0.05);
+    const left = until.current - performance.now();
+    light.current!.intensity = left > 0 ? 6 * (left / 140) : 0;
+    const a = geo.attributes.position.array as Float32Array;
+    sparks.forEach((sp, k) => {
+      if (sp.life > 0) {
+        sp.life -= dt;
+        sp.v.y -= 9.8 * dt;
+        sp.p.addScaledVector(sp.v, dt);
+      } else sp.p.y = -99;
+      a.set([sp.p.x, sp.p.y, sp.p.z], k * 3);
+    });
+    geo.attributes.position.needsUpdate = true;
+  });
+  return (
+    <>
+      <points geometry={geo} frustumCulled={false}>
+        <pointsMaterial color={new THREE.Color('#ffd27a').multiplyScalar(3)} size={0.025} sizeAttenuation toneMapped={false} />
+      </points>
+      <pointLight ref={light} intensity={0} distance={3} color="#cfe0ff" />
+    </>
+  );
+}
+
+/** ATS cabinet: click to open the door. Inside: the mains contactor K1, the generator contactor K2 and the
+ *  mechanical interlock that stops both closing at once. */
 function AtsCabinet() {
   const led = useRef<THREE.MeshStandardMaterial>(null);
   const led2 = useRef<THREE.MeshStandardMaterial>(null);
-  useFrame(() => {
+  const door = useRef<THREE.Group>(null);
+  const lever = useRef<THREE.Mesh>(null);
+  useFrame((_, dt) => {
     led.current!.emissiveIntensity = sim.mcb && sim.mainsOk ? 3 : 0;
     led2.current!.emissiveIntensity = sim.gcb ? 3 : 0;
+    const want = useUI.getState().atsOpen ? -1.9 : 0;
+    door.current!.rotation.y += (want - door.current!.rotation.y) * Math.min(1, dt * 4);
+    lever.current!.rotation.z += ((sim.mcb ? 0.35 : sim.gcb ? -0.35 : 0) - lever.current!.rotation.z) * Math.min(1, dt * 20);
   });
+  const toggle = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const open = !useUI.getState().atsOpen;
+    useUI.getState().set({ atsOpen: open });
+    if (open) goTo('atsOpen');
+  };
+  const cursor = {
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+      e.stopPropagation();
+      document.body.style.cursor = 'pointer';
+    },
+    onPointerOut: () => (document.body.style.cursor = ''),
+  };
   return (
     <group position={ATS_POS}>
-      <Box s={[1.6, 2.1, 0.7]} r={0.02} m={M.base} position={[0, 1.05, 0]} />
+      {/* carcass: back, sides, top and plinth, open at the front */}
+      <Box s={[1.6, 2.1, 0.04]} m={M.base} position={[0, 1.05, -0.33]} />
+      <Box s={[0.04, 2.1, 0.7]} m={M.base} position={[-0.78, 1.05, 0]} />
+      <Box s={[0.04, 2.1, 0.7]} m={M.base} position={[0.78, 1.05, 0]} />
+      <Box s={[1.6, 0.04, 0.7]} m={M.base} position={[0, 2.08, 0]} />
       <Box s={[1.5, 0.1, 0.72]} m={M.cast} position={[0, 0.05, 0]} />
-      <mesh position={[-0.3, 1.6, 0.36]}>
-        <circleGeometry args={[0.05, 16]} />
-        <meshStandardMaterial ref={led} color="#2ad16b" emissive="#2ad16b" />
+      <Box s={[1.4, 1.9, 0.02]} m={M.greyLight} position={[0, 1.05, -0.3]} />
+      {/* interior */}
+      <Contactor x={0.35} label="K1 · PLN" closed={() => sim.mcb} />
+      <Contactor x={-0.35} label="K2 · GENSET" closed={() => sim.gcb} />
+      <mesh ref={lever} position={[0, 1.5, 0.08]}>
+        <boxGeometry args={[0.55, 0.03, 0.03]} />
+        <meshStandardMaterial color="#d6b030" metalness={0.6} roughness={0.4} />
       </mesh>
-      <mesh position={[0.3, 1.6, 0.36]}>
-        <circleGeometry args={[0.05, 16]} />
-        <meshStandardMaterial ref={led2} color="#ffb020" emissive="#ffb020" />
-      </mesh>
-      <Text position={[0, 1.85, 0.36]} fontSize={0.16} color="#1b2228">
-        ATS
+      <Text position={[0, 1.58, 0.1]} fontSize={0.04} color="#1b2228">
+        INTERLOCK MEKANIK
       </Text>
-      <Text position={[-0.3, 1.45, 0.36]} fontSize={0.07} color="#1b2228">
-        PLN
+      {[-0.12, 0, 0.12].map((dx) => (
+        <Box key={dx} s={[0.9, 0.03, 0.02]} m={M.yellow} position={[0, 0.45 + dx, -0.12]} />
+      ))}
+      <Text position={[0, 0.25, 0]} fontSize={0.045} color="#1b2228">
+        BUSBAR KE GEDUNG
       </Text>
-      <Text position={[0.3, 1.45, 0.36]} fontSize={0.07} color="#1b2228">
-        GENSET
-      </Text>
+      <ContactArcs />
+      {/* door, hinged on the left; carries the lamps */}
+      <group ref={door} position={[-0.78, 0, 0.35]}>
+        <group position={[0.78, 0, 0]} onClick={toggle} {...cursor}>
+          <Box s={[1.56, 2.06, 0.04]} r={0.01} m={M.base} position={[0, 1.05, 0]} />
+          <mesh position={[-0.3, 1.6, 0.025]}>
+            <circleGeometry args={[0.05, 16]} />
+            <meshStandardMaterial ref={led} color="#2ad16b" emissive="#2ad16b" />
+          </mesh>
+          <mesh position={[0.3, 1.6, 0.025]}>
+            <circleGeometry args={[0.05, 16]} />
+            <meshStandardMaterial ref={led2} color="#ffb020" emissive="#ffb020" />
+          </mesh>
+          <Text position={[0, 1.85, 0.025]} fontSize={0.16} color="#1b2228">
+            ATS
+          </Text>
+          <Text position={[-0.3, 1.45, 0.025]} fontSize={0.07} color="#1b2228">
+            PLN
+          </Text>
+          <Text position={[0.3, 1.45, 0.025]} fontSize={0.07} color="#1b2228">
+            GENSET
+          </Text>
+          <Text position={[0, 1.1, 0.025]} fontSize={0.055} color="#1b2228">
+            KLIK UNTUK BUKA
+          </Text>
+          <Box s={[0.04, 0.25, 0.05]} m={M.black} position={[0.68, 1.05, 0.04]} />
+        </group>
+      </group>
     </group>
   );
 }

@@ -20,6 +20,7 @@ import {
   startExercise,
 } from '../sim/genset';
 import { Logbook } from './Logbook';
+import { IsoPanel, Scope } from './Instruments';
 import { Stopwatch } from './Stopwatch';
 import { sequence } from '../dse';
 import { initSound, setSound } from '../sound';
@@ -174,6 +175,16 @@ function Controls() {
         </button>
         <button disabled={sim.truckIn >= 0} onClick={() => callTanker(sim)}>
           {sim.truckIn >= 0 ? `Truk mengisi… ${Math.ceil(sim.truckIn)} dtk` : '⛽ Panggil truk solar'}
+        </button>
+      </div>
+
+      <h2>Uji & alat ukur</h2>
+      <div className="row">
+        <button className={ui.isoOpen ? 'on' : ''} onClick={() => ui.set({ isoOpen: !ui.isoOpen })}>
+          📊 Uji ISO 8528
+        </button>
+        <button className={ui.scopeOpen ? 'on' : ''} onClick={() => ui.set({ scopeOpen: !ui.scopeOpen })}>
+          📈 Osiloskop
         </button>
       </div>
 
@@ -358,6 +369,8 @@ export function App() {
   const panelOpen = useUI((s) => s.panelOpen);
   const tour = useUI((s) => s.tour);
   const logOpen = useUI((s) => s.logOpen);
+  const isoOpen = useUI((s) => s.isoOpen);
+  const scopeOpen = useUI((s) => s.scopeOpen);
   // Phones show one sheet at a time: the controls, or the DSE panel.
   const [narrow, setNarrow] = useState(() => innerWidth <= 900);
   useEffect(() => {
@@ -403,6 +416,8 @@ export function App() {
       {panelOpen && !(narrow && tour !== null) && <DsePanel />}
       <PartCard />
       {logOpen && <Logbook onClose={() => useUI.getState().set({ logOpen: false })} />}
+      {isoOpen && <IsoPanel onClose={() => useUI.getState().set({ isoOpen: false })} />}
+      {scopeOpen && <Scope onClose={() => useUI.getState().set({ scopeOpen: false })} />}
       {!started && (
         <div className="intro">
           <div>

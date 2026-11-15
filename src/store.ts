@@ -20,6 +20,9 @@ interface UI {
   weather: 'cerah' | 'hujan' | 'badai';
   cinematic: boolean; // camera follows the AMF sequence
   logOpen: boolean; // engine logbook dialog
+  isoOpen: boolean; // ISO 8528 recorder
+  scopeOpen: boolean; // three-phase oscilloscope
+  atsOpen: boolean; // ATS cabinet door open
   plnAutoReturn: boolean; // after a lightning strike the mains comes back by itself
   bump: () => void;
   set: (p: Partial<Omit<UI, 'bump' | 'set'>>) => void;
@@ -39,6 +42,9 @@ export const useUI = createStore<UI>((setState) => ({
   weather: 'cerah',
   cinematic: false,
   logOpen: false,
+  isoOpen: false,
+  scopeOpen: false,
+  atsOpen: false,
   plnAutoReturn: true,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),
