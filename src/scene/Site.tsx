@@ -84,6 +84,49 @@ function Building() {
   );
 }
 
+/** More of the site's load: each building comes on as the building-load slider passes its threshold. */
+export const LOADS = [
+  { name: 'PABRIK', kw: 800, from: 600, pos: [-34, 0, -14] as const, size: [18, 9, 14] as const, color: '#7f8f9a' },
+  { name: 'GUDANG & COLD STORAGE', kw: 500, from: 1400, pos: [26, 0, -21] as const, size: [14, 7, 12] as const, color: '#8a8070' },
+  { name: 'RUMAH SAKIT', kw: 500, from: 1900, pos: [-34, 0, 16] as const, size: [16, 11, 10] as const, color: '#d9dcd6' },
+];
+
+function ExtraBuilding({ i }: { i: number }) {
+  const L = LOADS[i];
+  const [w, h, d] = L.size;
+  const cols = Math.floor(w / 1.6);
+  const rows = Math.floor((h - 1) / 2.6);
+  const mesh = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(0.9, 1.0);
+    const mat = new THREE.MeshStandardMaterial({ color: '#0e1318', emissive: i === 2 ? '#eaf6ff' : '#ffd59a', emissiveIntensity: 0, roughness: 0.2, metalness: 0.6 });
+    const m = new THREE.InstancedMesh(geo, mat, cols * rows);
+    const mx = new THREE.Matrix4();
+    let k = 0;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++) {
+        mx.setPosition(L.pos[0] - w / 2 + 0.9 + c * ((w - 1.8) / Math.max(1, cols - 1)), 1.6 + r * 2.6, L.pos[2] + d / 2 + 0.01);
+        m.setMatrixAt(k++, mx);
+      }
+    return m;
+  }, [L, cols, rows, w, d, i]);
+  const level = useRef(0);
+  useFrame((_, dt) => {
+    const on = normalPowered(sim) && sim.demandKw > L.from ? 1 : 0;
+    level.current += (on - level.current) * Math.min(1, dt * (on ? 4 : 25));
+    (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = level.current * 0.85;
+  });
+  return (
+    <group>
+      <Box s={[w, h, d]} m={M.canopyDark} position={[L.pos[0], h / 2, L.pos[2]]} />
+      <Box s={[w + 0.3, 0.3, d + 0.3]} m={M.base} position={[L.pos[0], h, L.pos[2]]} />
+      <primitive object={mesh} />
+      <Text position={[L.pos[0], h - 0.6, L.pos[2] + d / 2 + 0.05]} fontSize={0.6} color="#cfd6dc" anchorX="center">
+        {`${L.name} · ±${L.kw} kW`}
+      </Text>
+    </group>
+  );
+}
+
 /** Building UPS beside the ATS: inverter cabinet with a status display and a battery cabinet. */
 function UpsCabinet() {
   const tex = useMemo(() => {
@@ -394,6 +437,23 @@ export function Site({ panelAt }: { panelAt: [number, number, number] }) {
       <Box s={[ax - panelAt[0] + 0.4, 0.04, 0.4]} m={M.cast} position={[(ax + panelAt[0]) / 2, 0.02, panelAt[2]]} />
       <Box s={[0.4, 0.04, Math.abs(az - panelAt[2])]} m={M.cast} position={[ax, 0.02, (az + panelAt[2]) / 2]} />
       <Building />
+      {LOADS.map((_, i) => (
+        <ExtraBuilding key={i} i={i} />
+      ))}
+      {LOADS.map((L, i) => {
+        const pts: [number, number, number][] = [
+          [ax - 0.4, 0.05, az + 0.4],
+          [ax - 0.4, 0.05, L.pos[2] + L.size[2] / 2 + 1],
+          [L.pos[0], 0.05, L.pos[2] + L.size[2] / 2 + 1],
+          [L.pos[0], 1.2, L.pos[2] + L.size[2] / 2 + 0.1],
+        ];
+        return (
+          <group key={i}>
+            <Line points={pts} color="#111" lineWidth={1.5} />
+            <Flow pts={pts} color="#ffe9a8" on={() => buildingPowered() && sim.demandKw > L.from} speed={1.5} />
+          </group>
+        );
+      })}
       <Pole />
       <AtsCabinet />
       <UpsCabinet />

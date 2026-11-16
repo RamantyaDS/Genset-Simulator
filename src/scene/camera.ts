@@ -15,6 +15,7 @@ export const PRESETS = {
   engine: { pos: [-0.6, 4.4, 3.6], target: [-0.5, 1.6, 0] },
   radiator: { pos: [-6, 2.6, 3.2], target: [-2.4, 1.4, 0] },
   site: { pos: [16, 10, 16], target: [2, 2, -6] },
+  kawasan: { pos: [26, 30, 40], target: [-6, 2, -6] },
   silent: { pos: [11, 6, 12], target: [0, 1.5, 0] },
   exploded: { pos: [7.5, 6.2, 10.5], target: [0.7, 1.9, 0.3] },
   fuel: { pos: [3, 6.5, 14], target: [-7, 0.5, 4.5] },

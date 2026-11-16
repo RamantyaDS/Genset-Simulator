@@ -24,7 +24,7 @@ export function ControlPanel() {
   }, []);
   const last = useRef(0);
   useFrame(({ clock }) => {
-    if (clock.elapsedTime - last.current < 0.1) return;
+    if (clock.elapsedTime - last.current < (src.plant ? 0.4 : 0.1)) return; // five panels in the plant: refresh less often
     last.current = clock.elapsedTime;
     drawModule(ctx, sim);
     tex.needsUpdate = true;

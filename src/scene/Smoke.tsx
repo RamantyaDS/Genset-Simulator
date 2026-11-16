@@ -140,7 +140,8 @@ export function Smoke({ at }: { at: [number, number, number] }) {
 
     const cold = sim.firing ? Math.max(0, Math.min(1, (65 - sim.coolant) / 25)) * (1 - 0.6 * Math.min(1, lf)) : 0;
     const vapour = !sim.firing && sim.starter && sim.fuelOn && sim.rpm > 100 ? 1 : 0;
-    const overload = Math.max(0, lf - 1) * 5;
+    // a fitted workshop build that overfuels smokes black in proportion to the load
+    const overload = Math.max(0, lf - 1) * 5 + (sim.mod ? sim.mod.smoke * 1.6 * Math.min(1, lf) : 0);
 
     let rate = 0;
     if (sim.firing) rate = 18 + 45 * Math.min(1.2, lf) + 70 * soot.current + 25 * cold;

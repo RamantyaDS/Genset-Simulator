@@ -13,6 +13,8 @@ export interface GensetSource {
   view: () => { explode: 0 | 1 | 2; xray: boolean };
   /** Plant hall: a click on a set that is not selected selects it (returns true) instead of inspecting the part. */
   pick?: () => boolean;
+  /** Engine only (workshop dyno): no alternator and no set panel. */
+  bare?: boolean;
   /** Engine block material to turn to glass, when the set has its own copy. */
   block?: THREE.MeshStandardMaterial;
 }

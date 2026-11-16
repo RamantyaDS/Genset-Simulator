@@ -154,6 +154,16 @@ export interface State {
   runs: RunLog[];
   iso: IsoTest;
   backIn: number; // seconds until the mains breaker closes on the return transfer, −1 none
+  mod: EngineMod | null; // a workshop build fitted to the set
+}
+
+/** What a workshop build changes on the set (from the dyno model at 1500 rpm). */
+export interface EngineMod {
+  name: string;
+  kwe: number; // electrical output the engine can drive through the alternator
+  bsfc: number; // fuel use relative to stock
+  egt: number; // exhaust temperature change, °C
+  smoke: number; // 0..1 visible smoke at full load
 }
 
 /** ISO 8528-5 style load-acceptance test run with the load bank, with a recorder. */
@@ -270,6 +280,7 @@ export function create(): State {
     runs: [],
     iso: { active: false, plan: [], step: 0, t: 0, stepStart: 0, rec: [], results: [] },
     backIn: -1,
+    mod: null,
   };
 }
 
@@ -347,12 +358,13 @@ export const amps = (s: State) => (s.volts > 1 ? (genKva(s) * 1000) / (Math.sqrt
 export const fuelRate = (s: State) => {
   if (!s.firing) return 0;
   const x = Math.min(1.1, loadFrac(s));
+  const k = s.mod ? s.mod.bsfc : 1;
   for (let i = 1; i < FUEL_CURVE.length; i++) {
     const [x0, y0] = FUEL_CURVE[i - 1];
     const [x1, y1] = FUEL_CURVE[i];
-    if (x <= x1) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    if (x <= x1) return k * (y0 + ((y1 - y0) * (x - x0)) / (x1 - x0));
   }
-  return FUEL_CURVE[FUEL_CURVE.length - 1][1];
+  return k * FUEL_CURVE[FUEL_CURVE.length - 1][1];
 };
 export const genAvailable = (s: State) =>
   s.firing && s.sinceStart > 2 && Math.abs(hz(s) - 50) < 2.5 && Math.abs(s.volts - 400) < 40;
@@ -693,6 +705,8 @@ export function step(s: State, dt: number) {
   s.dipF += s.dipFv * dt;
   s.dipV += -s.dipV * Math.min(1, dt / 0.45);
   if (s.firing && s.rpm > 1350) s.rpm = RATING.rpm * (1 + s.dipF);
+  // A fitted build that cannot drive the load: the governor runs out of fuel and the speed (frequency) sags.
+  if (s.mod && s.firing && s.genKw > s.mod.kwe && s.rpm > 1000) s.rpm *= 1 - Math.min(0.2, ((s.genKw - s.mod.kwe) / s.mod.kwe) * 0.8);
 
   // ISO 8528 load-acceptance test: steps the load bank, records frequency and voltage, judges each step.
   const iso = s.iso;
@@ -747,7 +761,7 @@ export function step(s: State, dt: number) {
   s.coolant += (coolTarget - s.coolant) * Math.min(1, dt / coolTau);
   // Exhaust gas before the turbines: ~150 °C idling, roughly 550–600 °C at prime power, higher in overload.
   // The turbine housings follow it with the lag of a heavy iron casting.
-  const exTarget = s.firing ? 150 + 420 * lf + 260 * Math.max(0, lf - 1) : 30;
+  const exTarget = s.firing ? 150 + 420 * lf + 260 * Math.max(0, lf - 1) + (s.mod ? s.mod.egt * Math.min(1, lf) : 0) : 30;
   s.exhaust += (exTarget - s.exhaust) * Math.min(1, dt / (exTarget > s.exhaust ? 20 : 70));
   const oilNorm = s.rpm > 600 ? 4.6 - 0.02 * (s.coolant - 75) : s.rpm > 50 ? 0.4 + 0.004 * s.rpm : 0;
   const oilTarget = s.faultOil && s.rpm > 50 ? oilNorm * 0.18 : oilNorm;

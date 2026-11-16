@@ -90,7 +90,7 @@ function build(c: AudioContext) {
   buzz.connect(buzzG).connect(master);
   buzz.start();
 
-  return { bus, turbo, turbo2, turboG, fanG, buzzG };
+  return { bus, turbo, turbo2, turboG, fanG, buzzG, top };
 }
 
 /** Must be called from a user gesture (browsers block audio until then). */
@@ -128,6 +128,11 @@ export interface SoundSource {
   lf: number;
   count: number; // engines running (louder with more)
   alarm: boolean;
+  /** Workshop extras: boost in bar, turbo size 0.8–1.5 (bigger whistles lower and louder), straight-pipe exhaust, knock 0..1. */
+  boost?: number;
+  turboSize?: number;
+  straight?: boolean;
+  knock?: number;
 }
 export const soundSource: { override: null | (() => SoundSource) } = { override: null };
 const fromSim = (): SoundSource => ({
@@ -152,7 +157,7 @@ export function updateSound(distance: number, enclosed: boolean) {
   // Closer is louder; the canopy's insulation takes most of the highs and some level.
   const near = Math.min(1, 8 / Math.max(3, distance));
   k(muffle.frequency, enclosed ? 650 : 16000, 0.2);
-  k(n.bus.gain, near * (enclosed ? 0.5 : 1) * (1 + 0.22 * Math.max(0, src.count - 1)), 0.1);
+  k(n.bus.gain, near * (enclosed ? 0.5 : 1) * (1 + 0.22 * Math.max(0, src.count - 1)) * (src.straight ? 1.6 : 1), 0.1);
 
   if (engine) {
     const p = engine.parameters;
@@ -160,14 +165,25 @@ export function updateSound(distance: number, enclosed: boolean) {
     k(p.get('load')!, lf, 0.25);
     p.get('firing')!.setValueAtTime(src.firing ? 1 : 0, t);
     p.get('starter')!.setValueAtTime(src.starter ? 1 : 0, t);
-    k(p.get('cold')!, Math.max(0, Math.min(1, (70 - src.coolant) / 30)), 1);
+    k(p.get('cold')!, Math.max(src.knock ?? 0, Math.max(0, Math.min(1, (70 - src.coolant) / 30))), src.knock !== undefined ? 0.2 : 1);
   }
 
   const spin = Math.min(1, r / 1500);
-  const boost = spin * (0.3 + 0.7 * Math.min(1, lf));
-  k(n.turbo.frequency, 1800 + 5200 * boost, 0.6);
-  k(n.turbo2.frequency, 2700 + 7400 * boost, 0.6);
-  k(n.turboG.gain, (src.firing ? 1 : 0) * spin * (0.002 + 0.01 * lf), 0.5);
+  if (src.boost !== undefined) {
+    // workshop: a loud spool that climbs with boost; big turbos whistle lower and louder
+    const size = src.turboSize ?? 1;
+    const b = Math.max(0, src.boost) / 2.6;
+    k(n.turbo.frequency, (1500 + 6500 * b) / size, 0.15);
+    k(n.turbo2.frequency, (2400 + 9800 * b) / size, 0.15);
+    k(n.turboG.gain, (src.firing ? 1 : 0) * Math.min(0.32, 0.015 + 0.13 * b * size), 0.12);
+    k(n.top.frequency, src.straight ? 11000 : 6500, 0.3);
+  } else {
+    const boost = spin * (0.3 + 0.7 * Math.min(1, lf));
+    k(n.turbo.frequency, 1800 + 5200 * boost, 0.6);
+    k(n.turbo2.frequency, 2700 + 7400 * boost, 0.6);
+    k(n.turboG.gain, (src.firing ? 1 : 0) * spin * (0.006 + 0.03 * lf), 0.5);
+    k(n.top.frequency, 6500, 0.3);
+  }
   k(n.fanG.gain, 0.22 * spin * spin, 0.3);
 
   const buzzing = src.alarm;

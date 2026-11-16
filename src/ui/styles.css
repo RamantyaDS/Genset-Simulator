@@ -835,3 +835,39 @@ button:focus-visible {
     font-size: 11.5px;
   }
 }
+
+.mod-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 520px;
+  background: #3a1d10;
+  border: 1px solid #b3561e;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  z-index: 3;
+}
+.mod-banner span {
+  color: #e8c9b4;
+}
+
+.hide-ui {
+  position: fixed;
+  left: 322px;
+  bottom: 16px;
+  z-index: 6;
+}
+@media (max-width: 900px) {
+  .hide-ui {
+    left: auto;
+    right: 16px;
+    bottom: auto;
+    top: 14px;
+  }
+}

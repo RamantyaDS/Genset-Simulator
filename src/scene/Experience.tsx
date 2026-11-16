@@ -15,6 +15,7 @@ import { FuelSystem } from './FuelSystem';
 import { Director, SkyLight, Weather } from './Weather';
 import { ThermalView } from './Thermal';
 import { Details, GensetRoom, ROOM_STACK } from './Dressing';
+import { Adaptive, MAX_DPR } from './Adaptive';
 import { CylinderCutaway } from './Cylinder';
 import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
@@ -74,8 +75,8 @@ export function Experience() {
   };
   const panelWorld: [number, number, number] = [PANEL_POS[0] + shift[0], PANEL_POS[1] + shift[1], PANEL_POS[2]];
   return (
-    <Canvas shadows dpr={[1, 2]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
-      <fog attach="fog" args={['#1b2532', 30, 90]} />
+    <Canvas shadows dpr={[1, MAX_DPR]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
+      <fog attach="fog" args={["#1b2532", 40, 150]} />
       <hemisphereLight ref={hemi} args={['#9fb6d6', '#2a2620', 0.5]} />
       <directionalLight
         ref={sun}
@@ -83,7 +84,7 @@ export function Experience() {
         intensity={1.6}
         color="#ffe2c0"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-14}
         shadow-camera-right={14}
         shadow-camera-top={14}
@@ -116,8 +117,9 @@ export function Experience() {
       <FuelSystem />
       <Smoke key={`${view}${room}`} at={stack} />
 
-      <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={45} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
+      <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={80} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
       <Intro />
+      <Adaptive onLow={() => useUI.getState().set({ hq: false })} />
       <Driver />
       <EffectComposer>
         {hq ? <N8AO aoRadius={1.2} intensity={2.2} distanceFalloff={0.6} halfRes /> : <></>}

@@ -23,6 +23,7 @@ import { Logbook } from './Logbook';
 import { IsoPanel, Scope } from './Instruments';
 import { CylinderCard, ThermalCard } from './Modes';
 import { Stopwatch } from './Stopwatch';
+import { gensetFit, type Build } from '../sim/dyno';
 import { sequence } from '../dse';
 import { initSound, setSound } from '../sound';
 import { sim, useUI } from '../store';
@@ -77,6 +78,7 @@ function Controls() {
     ['fuel', 'Tangki'],
     ['ups', 'ATS & UPS'],
     ['site', 'Lokasi'],
+    ['kawasan', 'Kawasan'],
   ];
   return (
     <aside className="panel">
@@ -92,7 +94,7 @@ function Controls() {
           aria-label="Beban gedung"
           type="range"
           min={0}
-          max={2200}
+          max={2400}
           step={50}
           value={sim.demandKw}
           onChange={(e) => {
@@ -388,11 +390,56 @@ function Controls() {
   );
 }
 
+/** A workshop build fitted to the set: what it changes, and the way back to stock. */
+function ModBanner() {
+  useUI((st) => st.tick);
+  const m = sim.mod;
+  if (!m) return null;
+  return (
+    <div className="mod-banner">
+      <b>🔧 Mesin modifikasi: {m.name}</b>
+      <span>
+        Mesin sanggup ±{Math.round(m.kwe)} kWe di 1500 rpm
+        {m.kwe > RATING.standbyKw ? ', tapi alternator tetap dibatasi 2000 kW standby' : m.kwe < RATING.primeKw ? ': tidak sanggup beban penuh, frekuensi akan turun' : ''} · solar{' '}
+        {m.bsfc >= 1 ? '+' : ''}
+        {Math.round((m.bsfc - 1) * 100)}% per kWh · EGT {m.egt >= 0 ? '+' : ''}
+        {Math.round(m.egt)} °C
+      </span>
+      <button
+        className="small"
+        onClick={() => {
+          sim.mod = null;
+          try {
+            localStorage.removeItem('genset-fit');
+          } catch {
+            /* ignore */
+          }
+        }}
+      >
+        Kembalikan mesin standar
+      </button>
+    </div>
+  );
+}
+
 export function App() {
   const [started, setStarted] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('genset-fit');
+      if (raw) {
+        const b = JSON.parse(raw) as Build;
+        const f = gensetFit(b);
+        sim.mod = { name: b.name, kwe: f.kwe, bsfc: f.bsfc, egt: f.egt, smoke: f.smoke };
+      }
+    } catch {
+      /* no saved build */
+    }
+  }, []);
   const panelOpen = useUI((s) => s.panelOpen);
   const tour = useUI((s) => s.tour);
   const logOpen = useUI((s) => s.logOpen);
+  const hideUi = useUI((s) => s.hideUi);
   const isoOpen = useUI((s) => s.isoOpen);
   const scopeOpen = useUI((s) => s.scopeOpen);
   const thermal = useUI((s) => s.thermal);
@@ -416,7 +463,10 @@ export function App() {
   return (
     <>
       <Experience />
-      <header className="brand">
+      <button className={`small hide-ui ${hideUi ? '' : 'on'}`} onClick={() => useUI.getState().set({ hideUi: !hideUi })} title="Sembunyikan atau tampilkan panel">
+        👁 Panel
+      </button>
+      <header className="brand" style={hideUi ? { display: 'none' } : undefined}>
         <h1>Genset 2250 kVA</h1>
         <p>Perkins 4016-61TRG3 · Stamford P734H · DSE7320</p>
         {tour === null && (
@@ -435,12 +485,28 @@ export function App() {
             ⚡ Mode pembangkit 5 unit
           </button>
         )}
+        {tour === null && (
+          <button
+            className="tour-start plant-start bengkel-start"
+            onClick={() => {
+              initSound();
+              useUI.getState().set({ mode: 'bengkel', explode: 0, xray: false, focus: null, thermal: false, cylinder: false });
+            }}
+          >
+            🔧 Bengkel
+          </button>
+        )}
       </header>
-      <Gauges />
-      {tour === null && <Stopwatch compact={narrow} />}
-      {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
-      {panelOpen && !(narrow && tour !== null) && <DsePanel />}
+      {!hideUi && (
+        <>
+          <Gauges />
+          {tour === null && <Stopwatch compact={narrow} />}
+          {tour !== null ? <Tour /> : !(narrow && panelOpen) && <Controls />}
+          {panelOpen && !(narrow && tour !== null) && <DsePanel />}
+        </>
+      )}
       <PartCard />
+      <ModBanner />
       {logOpen && <Logbook onClose={() => useUI.getState().set({ logOpen: false })} />}
       {isoOpen && <IsoPanel onClose={() => useUI.getState().set({ isoOpen: false })} />}
       {scopeOpen && <Scope onClose={() => useUI.getState().set({ scopeOpen: false })} />}

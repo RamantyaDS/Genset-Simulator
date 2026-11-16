@@ -740,6 +740,7 @@ function Shaker({ children }: { children: ReactNode }) {
 }
 
 export function Genset() {
+  const { bare } = useGenset();
   return (
     <group>
       <BaseFrame />
@@ -751,13 +752,17 @@ export function Genset() {
         <Part id="aircleaner" o1={[0.4, 1.2, 0]} o2={[0.7, 0.6, 0]}>
           <AirCleaners />
         </Part>
-        <group>
-          <AlternatorMount />
-        </group>
+        {!bare && (
+          <group>
+            <AlternatorMount />
+          </group>
+        )}
       </Shaker>
-      <Part id="panel" o1={[0.9, 0.4, -1.9]} o2={[1.0, 0, -0.5]}>
-        <ControlPanel />
-      </Part>
+      {!bare && (
+        <Part id="panel" o1={[0.9, 0.4, -1.9]} o2={[1.0, 0, -0.5]}>
+          <ControlPanel />
+        </Part>
+      )}
     </group>
   );
 }
