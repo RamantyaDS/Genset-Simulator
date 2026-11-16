@@ -393,11 +393,27 @@ function Controls() {
 /** A workshop build fitted to the set: what it changes, and the way back to stock. */
 function ModBanner() {
   useUI((st) => st.tick);
+  const [open, setOpen] = useState(true);
   const m = sim.mod;
+  // shows the details briefly, then gets out of the way as a small chip
+  useEffect(() => {
+    if (!open) return;
+    const id = setTimeout(() => setOpen(false), 8000);
+    return () => clearTimeout(id);
+  }, [open, m?.name]);
   if (!m) return null;
+  if (!open)
+    return (
+      <button className="small mod-chip" onClick={() => setOpen(true)} title="Lihat detail mesin modifikasi">
+        🔧 Mesin modifikasi
+      </button>
+    );
   return (
     <div className="mod-banner">
       <b>🔧 Mesin modifikasi: {m.name}</b>
+      <button className="x" onClick={() => setOpen(false)} aria-label="Ciutkan">
+        ×
+      </button>
       <span>
         Mesin sanggup ±{Math.round(m.kwe)} kWe di 1500 rpm
         {m.kwe > RATING.standbyKw ? ', tapi alternator tetap dibatasi 2000 kW standby' : m.kwe < RATING.primeKw ? ': tidak sanggup beban penuh, frekuensi akan turun' : ''} · solar{' '}

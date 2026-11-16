@@ -15,7 +15,7 @@ import { FuelSystem } from './FuelSystem';
 import { Director, SkyLight, Weather } from './Weather';
 import { ThermalView } from './Thermal';
 import { Details, GensetRoom, ROOM_STACK } from './Dressing';
-import { ModParts } from './ModParts';
+import { ModParts, STRAIGHT_TOP } from './ModParts';
 import { loadFrac } from '../sim/genset';
 import { MAX_DPR } from './Adaptive';
 import { CylinderCutaway } from './Cylinder';
@@ -70,6 +70,8 @@ export function Experience() {
   const room = useUI((s) => s.room) && !silent;
   const hq = useUI((s) => s.hq);
   const stack: [number, number, number] = silent ? SILENT_STACK : room ? ROOM_STACK : [0.74, 2.62, 0];
+  // a fitted straight-pipe build: the smoke leaves from the tops of its two pipes (not in the canopy or the room)
+  const straightOut = () => !silent && !room && !!sim.mod?.build.straight;
   const haze: HazeSources = {
     exhaust: { from: stack, to: [stack[0] + 0.9, stack[1] + 3.2, stack[2]], width: 0.45 },
     radiator: silent
@@ -109,6 +111,7 @@ export function Experience() {
           build={() => sim.mod?.build ?? null}
           boost={() => (sim.firing ? (sim.rpm / 1500) * (0.4 + 2.2 * Math.min(1.1, loadFrac(sim))) : 0)}
           outside={!silent}
+          straightOk={!silent && !room}
         />
         <Details />
         <Flows />
@@ -124,7 +127,10 @@ export function Experience() {
       <Weather />
       <Director />
       <FuelSystem />
-      <Smoke key={`${view}${room}`} at={stack} />
+      <Smoke
+        key={`${view}${room}`}
+        at={() => (straightOut() ? [0.74, STRAIGHT_TOP, Math.random() < 0.5 ? 0.3 : -0.3] : stack)}
+      />
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={80} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
       <Intro />

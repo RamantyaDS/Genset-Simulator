@@ -6,7 +6,7 @@ import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import { useEffect, useLayoutEffect, useMemo, useRef, type ElementRef } from 'react';
 import * as THREE from 'three';
 import { Genset } from '../scene/Genset';
-import { ModParts } from '../scene/ModParts';
+import { ModParts, STRAIGHT_TOP } from '../scene/ModParts';
 import { Box, Cyl, M } from '../scene/parts';
 import { GensetCtx, type GensetSource } from '../scene/source';
 import { create as createGenset } from '../sim/genset';
@@ -132,7 +132,9 @@ function Plume() {
         acc.current--;
         const q = parts[next.current];
         next.current = (next.current + 1) % N;
-        q.p.set(STACK[0] + (Math.random() - 0.5) * 0.2, STACK[1] + (e.build.straight ? 1.5 : 0.3), (Math.random() - 0.5) * 0.3);
+        // stock outlet, or the tops of the two straight-through pipes
+        if (e.build.straight) q.p.set(STACK[0] + (Math.random() - 0.5) * 0.1, STRAIGHT_TOP, (Math.random() < 0.5 ? 0.3 : -0.3) + (Math.random() - 0.5) * 0.1);
+        else q.p.set(STACK[0] + (Math.random() - 0.5) * 0.2, STACK[1] + 0.3, (Math.random() - 0.5) * 0.3);
         q.v.set((Math.random() - 0.5) * 0.5, 3 + 5 * (e.rpm / 2000), (Math.random() - 0.5) * 0.5);
         q.age = 0;
         q.life = 2.2 + Math.random();

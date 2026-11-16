@@ -871,3 +871,17 @@ button:focus-visible {
     top: 14px;
   }
 }
+
+.mod-banner .x {
+  margin-left: auto;
+  padding: 0 8px;
+}
+.mod-chip {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #3a1d10;
+  border-color: #b3561e;
+  z-index: 3;
+}

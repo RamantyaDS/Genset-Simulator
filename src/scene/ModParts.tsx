@@ -131,7 +131,22 @@ function ChargePipes({ twin }: { twin: boolean }) {
   );
 }
 
-export function ModParts({ root, build, boost, outside = true }: { root: RefObject<THREE.Group>; build: () => Build | null; boost: () => number; outside?: boolean }) {
+/** Height of the straight-through pipes' outlets (set frame), where their smoke comes out. */
+export const STRAIGHT_TOP = 4.1;
+
+export function ModParts({
+  root,
+  build,
+  boost,
+  outside = true,
+  straightOk = outside,
+}: {
+  root: RefObject<THREE.Group>;
+  build: () => Build | null;
+  boost: () => number;
+  outside?: boolean;
+  straightOk?: boolean;
+}) {
   const turbos = useRef<THREE.Object3D[]>([]);
   const cleaners = useRef<THREE.Object3D | null>(null);
   const big = useRef<THREE.Group>(null);
@@ -185,7 +200,7 @@ export function ModParts({ root, build, boost, outside = true }: { root: RefObje
     cooler.current!.visible = ic;
     pipesQuad.current!.visible = ic && !twin;
     pipesTwin.current!.visible = ic && twin;
-    straight.current!.visible = outside && !!b && b.straight;
+    straight.current!.visible = straightOk && !!b && b.straight;
     const w = boost() > 0.2 ? 14 + 12 * Math.min(1, boost() / 3) : 0;
     fans.current.forEach((f) => f && (f.rotation.x += w * dt));
     void TURBOS;

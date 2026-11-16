@@ -73,7 +73,7 @@ const SOOT = new THREE.Color('#141414');
 const HAZE = new THREE.Color('#8f9396');
 const WHITE = new THREE.Color('#e4ebf2');
 
-export function Smoke({ at }: { at: [number, number, number] }) {
+export function Smoke({ at: where }: { at: [number, number, number] | (() => [number, number, number]) }) {
   const { geo, mat, parts } = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
@@ -114,6 +114,8 @@ export function Smoke({ at }: { at: [number, number, number] }) {
     const q = parts[next.current];
     next.current = (next.current + 1) % N;
     const r = 0.12;
+    // the outlet can move (e.g. a straight-pipe build has two outlets higher up), so it is asked for at each puff
+    const at = typeof where === 'function' ? where() : where;
     q.p.set(at[0] + (Math.random() - 0.5) * r, at[1], at[2] + (Math.random() - 0.5) * r);
     q.v.set((Math.random() - 0.5) * 0.5, speed * (0.85 + Math.random() * 0.3), (Math.random() - 0.5) * 0.5);
     q.age = 0;
