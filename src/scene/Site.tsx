@@ -303,6 +303,12 @@ function ContactArcs() {
   );
 }
 
+/** The arc light and sparks only exist while the door is open (an always-present light costs every material). */
+function AtsArcs() {
+  const open = useUI((st) => st.atsOpen);
+  return open ? <ContactArcs /> : null;
+}
+
 /** ATS cabinet: click to open the door. Inside: the mains contactor K1, the generator contactor K2 and the
  *  mechanical interlock that stops both closing at once. */
 function AtsCabinet() {
@@ -355,7 +361,7 @@ function AtsCabinet() {
       <Text position={[0, 0.25, 0]} fontSize={0.045} color="#1b2228">
         BUSBAR KE GEDUNG
       </Text>
-      <ContactArcs />
+      <AtsArcs />
       {/* door, hinged on the left; carries the lamps */}
       <group ref={door} position={[-0.78, 0, 0.35]}>
         <group position={[0.78, 0, 0]} onClick={toggle} {...cursor}>

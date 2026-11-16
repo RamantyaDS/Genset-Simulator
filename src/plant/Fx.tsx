@@ -312,7 +312,8 @@ export function Arcs() {
     const sparks = Array.from({ length: N }, () => ({ p: new THREE.Vector3(0, -99, 0), v: new THREE.Vector3(), life: 0 }));
     return { geo, sparks };
   }, []);
-  const light = useRef<THREE.PointLight>(null);
+  // the flash is a bloomed glow ball, not a light: an extra light would cost every material in the scene every frame
+  const light = useRef<THREE.Mesh>(null);
   const until = useRef(0);
   const next = useRef(0);
   const burst = (at: THREE.Vector3, n: number) => {
@@ -341,7 +342,9 @@ export function Arcs() {
   useFrame((_, raw) => {
     const dt = Math.min(raw, 0.05);
     const left = until.current - performance.now();
-    light.current!.intensity = left > 0 ? 300 * (left / 220) * (0.6 + Math.random() * 0.4) : 0;
+    const k = left > 0 ? (left / 220) * (0.6 + Math.random() * 0.4) : 0;
+    light.current!.visible = k > 0;
+    light.current!.scale.setScalar(0.3 + 2.2 * k);
     const a = geo.attributes.position.array as Float32Array;
     sparks.forEach((s, k) => {
       if (s.life > 0) {
@@ -362,7 +365,10 @@ export function Arcs() {
       <points geometry={geo} frustumCulled={false}>
         <pointsMaterial color={new THREE.Color('#ffd27a').multiplyScalar(3)} size={0.12} sizeAttenuation toneMapped={false} />
       </points>
-      <pointLight ref={light} intensity={0} distance={40} color="#cfe0ff" />
+      <mesh ref={light} visible={false}>
+        <sphereGeometry args={[0.5, 16, 12]} />
+        <meshBasicMaterial color={new THREE.Color('#cfe0ff').multiplyScalar(6)} toneMapped={false} transparent opacity={0.85} depthWrite={false} />
+      </mesh>
     </>
   );
 }

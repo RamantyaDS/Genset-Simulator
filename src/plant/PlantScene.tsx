@@ -671,9 +671,17 @@ function Intro() {
   return null;
 }
 
+/** The lightning light only exists during a storm, so clear nights don't pay for it. */
+function StormOnly() {
+  const storm = usePlant(() => plant.weather === 'badai');
+  return storm ? <Lightning /> : null;
+}
+
+// Shadows are off in the plant: the scene is always at night and the moon's shadows barely show, while drawing every
+// set's hundreds of parts into a shadow map was the single biggest cost on a laptop GPU.
 export function PlantScene() {
   return (
-    <Canvas shadows dpr={[1, MAX_DPR]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
+    <Canvas dpr={[1, MAX_DPR]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
       <fog attach="fog" args={['#bcd4e6', 120, 420]} />
       <DayNight />
       <Grounds />
@@ -689,7 +697,7 @@ export function PlantScene() {
       <FocusHighlight />
       <PlantSmoke />
       <Rain />
-      <Lightning />
+      <StormOnly />
       <Arcs />
       <Stacks />
       <ControlRoom />

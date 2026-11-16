@@ -1,5 +1,5 @@
 // Keeps slower laptops smooth: watches the frame rate and drops the render resolution (and, through `onLow`, the
-// costly effects) when it falls, raising it again when there is headroom.
+// costly effects) when it falls. It only steps down: going back up reallocates every render target, which stutters.
 import { PerformanceMonitor } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 
@@ -14,7 +14,6 @@ export function Adaptive({ onLow }: { onLow?: () => void }) {
         setDpr(1);
         onLow?.();
       }}
-      onIncline={() => setDpr(MAX_DPR)}
       onFallback={() => {
         setDpr(0.85);
         onLow?.();

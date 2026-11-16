@@ -109,6 +109,7 @@ export function Smoke({ at }: { at: [number, number, number] }) {
     [],
   );
 
+  const scratch = useMemo(() => new THREE.Color(), []);
   const spawn = (col: THREE.Color, alpha: number, speed: number, size: number) => {
     const q = parts[next.current];
     next.current = (next.current + 1) % N;
@@ -150,7 +151,7 @@ export function Smoke({ at }: { at: [number, number, number] }) {
     const speed = sim.firing ? 3.5 + 4 * spin + 3.5 * Math.min(1, lf) : 1.2;
     while (acc.current > 1) {
       acc.current -= 1;
-      const col = new THREE.Color();
+      const col = scratch; // spawn copies it, so one reusable colour avoids garbage every frame
       let a: number;
       if (vapour) {
         col.copy(WHITE);

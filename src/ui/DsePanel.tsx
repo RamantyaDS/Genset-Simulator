@@ -13,9 +13,14 @@ export function DsePanel({ s = sim, onPress, note }: { s?: State; onPress?: (id:
 
   useEffect(() => {
     let id = 0;
-    const draw = () => {
+    let last = 0;
+    const draw = (now = 0) => {
       const c = canvas.current;
-      if (c) drawModule(c.getContext('2d')!, s);
+      // the module screen changes slowly: ~12 redraws a second is plenty and saves CPU every frame
+      if (c && now - last > 80) {
+        last = now;
+        drawModule(c.getContext('2d')!, s);
+      }
       id = requestAnimationFrame(draw);
     };
     draw();

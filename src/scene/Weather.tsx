@@ -21,19 +21,21 @@ const DAY = { bg: '#9db9d3', hemi: 1.1, sun: 3.2, sunColor: '#fff6e6', env: 1.0 
 export function SkyLight({ hemi, sun }: { hemi: React.RefObject<THREE.HemisphereLight>; sun: React.RefObject<THREE.DirectionalLight> }) {
   const scene = useThree((s) => s.scene);
   const col = useMemo(() => new THREE.Color(), []);
+  const dayBg = useMemo(() => new THREE.Color(DAY.bg), []);
+  const daySun = useMemo(() => new THREE.Color(DAY.sunColor), []);
   const k = useRef(0);
   useFrame((_, dt) => {
     const { sky, weather } = useUI.getState();
     k.current += ((sky === 'siang' ? 1 : 0) - k.current) * Math.min(1, dt * 1.5);
     const cloud = weather === 'cerah' ? 1 : weather === 'hujan' ? 0.7 : 0.5;
     const t = k.current;
-    col.set(NIGHT.bg).lerp(new THREE.Color(DAY.bg), t).multiplyScalar(weather === 'cerah' ? 1 : 0.75 + 0.25 * (1 - t));
+    col.set(NIGHT.bg).lerp(dayBg, t).multiplyScalar(weather === 'cerah' ? 1 : 0.75 + 0.25 * (1 - t));
     scene.background = col;
     if (scene.fog) (scene.fog as THREE.Fog).color.copy(col);
     if (hemi.current) hemi.current.intensity = (NIGHT.hemi + (DAY.hemi - NIGHT.hemi) * t) * (0.6 + 0.4 * cloud);
     if (sun.current) {
       sun.current.intensity = (NIGHT.sun + (DAY.sun - NIGHT.sun) * t) * cloud;
-      sun.current.color.set(NIGHT.sunColor).lerp(new THREE.Color(DAY.sunColor), t);
+      sun.current.color.set(NIGHT.sunColor).lerp(daySun, t);
     }
   });
   return null;
@@ -154,10 +156,11 @@ function Lightning() {
 }
 
 export function Weather() {
+  const storm = useUI((s) => s.weather === 'badai');
   return (
     <>
       <Rain />
-      <Lightning />
+      {storm && <Lightning />}
     </>
   );
 }

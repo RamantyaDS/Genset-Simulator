@@ -122,7 +122,7 @@ export function Experience() {
       <Adaptive onLow={() => useUI.getState().set({ hq: false })} />
       <Driver />
       <EffectComposer>
-        {hq ? <N8AO aoRadius={1.2} intensity={2.2} distanceFalloff={0.6} halfRes /> : <></>}
+        {hq ? <N8AO aoRadius={1.2} intensity={2.2} distanceFalloff={0.6} halfRes quality="performance" aoSamples={10} denoiseSamples={4} /> : <></>}
         <HeatHaze sources={haze} />
         <Bloom mipmapBlur luminanceThreshold={1} intensity={0.8} />
       </EffectComposer>
