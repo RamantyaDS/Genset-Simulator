@@ -22,7 +22,7 @@ const VIEWS: Record<BView, [number[], number[]]> = {
   turbo: [[2.4, 3.6, 3.2], [0.74, 2.3, 0]],
   dyno: [[4.8, 2.0, 3.6], [2.2, 1.1, 0]],
   sel: [[9, 6.5, 10], [0, 1.5, 0]],
-  belakang: [[3.4, 3.0, -4.4], [-0.4, 1.4, -2.0]],
+  belakang: [[-6.6, 3.6, 3.8], [-1.6, 2.0, 0]],
 };
 export const goB = (v: BView) => {
   const [p, t] = VIEWS[v];
