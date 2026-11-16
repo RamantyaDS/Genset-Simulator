@@ -1,4 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The plant has random events (motor starts, ships, faults). A fixed-seed generator keeps every run of the tests the
+// same while still exercising them.
+beforeEach(() => {
+  let seed = 12345;
+  vi.spyOn(Math, 'random').mockImplementation(() => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  });
+});
 import { busLive, busLoadKw, closeBreaker, feederFault, SERVICE_RP, startService, create, DAY_L, startScenario, drainDayTank, loadKw, online, PRIME_KW, setEStop, setFeeder, startUnit, step, syncDiff, trim, type Plant } from './plant';
 
 const run = (p: Plant, s: number, dt = 0.02) => {
