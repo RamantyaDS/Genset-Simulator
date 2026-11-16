@@ -16,7 +16,7 @@ import { useUI } from '../store';
 import { busLive, PRIME_KW } from '../sim/plant';
 import { playPlantEvent, soundSource, updateSound } from '../sound';
 import { ControlPanels } from './ControlPanels';
-import { Adaptive, MAX_DPR } from '../scene/Adaptive';
+import { MAX_DPR } from '../scene/Adaptive';
 import { Arcs, Lightning, PlantSmoke, Rain } from './Fx';
 import { GensetUnit, unitState } from './GensetUnit';
 import { cams, goPlant, unitWorld } from './camera';
@@ -681,7 +681,7 @@ function StormOnly() {
 // set's hundreds of parts into a shadow map was the single biggest cost on a laptop GPU.
 export function PlantScene() {
   return (
-    <Canvas dpr={[1, MAX_DPR]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
+    <Canvas dpr={[1, Math.min(MAX_DPR, 1.75)]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
       <fog attach="fog" args={['#bcd4e6', 120, 420]} />
       <DayNight />
       <Grounds />
@@ -706,7 +706,6 @@ export function PlantScene() {
       <Complex />
       <CameraControls ref={(c) => (cams.current = c)} makeDefault minDistance={3} maxDistance={260} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
       <Intro />
-      <Adaptive />
       <Driver />
       <EffectComposer>
         <UnitHaze />

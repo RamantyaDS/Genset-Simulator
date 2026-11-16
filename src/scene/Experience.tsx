@@ -15,7 +15,7 @@ import { FuelSystem } from './FuelSystem';
 import { Director, SkyLight, Weather } from './Weather';
 import { ThermalView } from './Thermal';
 import { Details, GensetRoom, ROOM_STACK } from './Dressing';
-import { Adaptive, MAX_DPR } from './Adaptive';
+import { MAX_DPR } from './Adaptive';
 import { CylinderCutaway } from './Cylinder';
 import { HeatHaze, type HazeSources } from './HeatHaze';
 import { Genset } from './Genset';
@@ -119,7 +119,6 @@ export function Experience() {
 
       <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={80} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
       <Intro />
-      <Adaptive onLow={() => useUI.getState().set({ hq: false })} />
       <Driver />
       <EffectComposer>
         {hq ? <N8AO aoRadius={1.2} intensity={2.2} distanceFalloff={0.6} halfRes quality="performance" aoSamples={10} denoiseSamples={4} /> : <></>}

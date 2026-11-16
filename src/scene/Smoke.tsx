@@ -24,7 +24,7 @@ const vert = /* glsl */ `
   varying vec3 vTint;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = size * scale / -mv.z;
+    gl_PointSize = min(size * scale / -mv.z, 220.0); // capped: huge sprites right at the camera cost a lot of fill rate
     gl_Position = projectionMatrix * mv;
     vAlpha = alpha;
     vRot = rot;

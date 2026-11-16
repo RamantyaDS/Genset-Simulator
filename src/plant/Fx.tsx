@@ -68,7 +68,7 @@ export function PlantSmoke() {
       vertexShader: /* glsl */ `
         attribute float size; attribute float alpha; attribute float shade; attribute float rot; attribute float warm;
         uniform float scale; varying float vA; varying float vS; varying float vR; varying float vW;
-        void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = size*scale/-mv.z; gl_Position = projectionMatrix*mv;
+        void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = min(size*scale/-mv.z, 220.0); gl_Position = projectionMatrix*mv;
           vA=alpha; vS=shade; vR=rot; vW=warm; }`,
       fragmentShader: /* glsl */ `
         uniform sampler2D map; uniform float flash; varying float vA; varying float vS; varying float vR; varying float vW;

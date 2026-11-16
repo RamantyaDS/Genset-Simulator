@@ -11,7 +11,7 @@ import { GensetCtx, type GensetSource } from '../scene/source';
 import { create as createGenset } from '../sim/genset';
 import { LIMITS, TURBOS } from '../sim/dyno';
 import { arcSound, playPlantEvent, soundSource, thunder, updateSound } from '../sound';
-import { Adaptive, MAX_DPR } from '../scene/Adaptive';
+import { MAX_DPR } from '../scene/Adaptive';
 import { advanceEngine, engine, input, onEngineEvent, useBengkel } from './store';
 
 export const bcam = { current: null as ElementRef<typeof CameraControls> | null };
@@ -150,7 +150,7 @@ function Plume() {
       depthWrite: false,
       uniforms: { scale: { value: 800 } },
       vertexShader: `attribute float size; attribute float alpha; attribute vec3 color; uniform float scale; varying float vA; varying vec3 vC;
-        void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = size*scale/-mv.z; gl_Position = projectionMatrix*mv; vA=alpha; vC=color; }`,
+        void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = min(size*scale/-mv.z, 220.0); gl_Position = projectionMatrix*mv; vA=alpha; vC=color; }`,
       fragmentShader: `varying float vA; varying vec3 vC; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.05,d)*vA; if(a<0.004) discard; gl_FragColor=vec4(vC,a); }`,
     });
     const parts = Array.from({ length: N }, () => ({ p: new THREE.Vector3(0, -99, 0), v: new THREE.Vector3(), age: 9, life: 1, c: new THREE.Color(), a: 0.3 }));
@@ -399,7 +399,6 @@ export function BengkelScene() {
       <RodFailure />
       <CameraControls ref={(c) => (bcam.current = c)} makeDefault minDistance={1.5} maxDistance={20} maxPolarAngle={Math.PI * 0.49} smoothTime={0.6} />
       <Intro />
-      <Adaptive />
       <Driver />
       <EffectComposer>
         <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />

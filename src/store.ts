@@ -1,5 +1,6 @@
 import { create as createStore } from 'zustand';
 import { create, step, type SimEvent, type State } from './sim/genset';
+import { LOW_GPU } from './scene/Adaptive';
 
 // The simulation state is mutated in place every tick; `tick` bumps so React panels re-render at a modest rate.
 export const sim: State = create();
@@ -56,7 +57,7 @@ export const useUI = createStore<UI>((setState) => ({
   cylSpeed: 8,
   room: false,
   hideUi: false,
-  hq: innerWidth > 900, // ambient occlusion; the adaptive monitor turns it off on a slow GPU
+  hq: !LOW_GPU && innerWidth > 900, // ambient occlusion on wide screens, as before; `?q=low` turns it off
   plnAutoReturn: true,
   bump: () => setState((s) => ({ tick: s.tick + 1 })),
   set: (p) => setState(p),
