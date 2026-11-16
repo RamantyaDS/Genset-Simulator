@@ -5,7 +5,8 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import { useEffect, useLayoutEffect, useMemo, useRef, type ElementRef } from 'react';
 import * as THREE from 'three';
-import { BLOCK, Genset } from '../scene/Genset';
+import { Genset } from '../scene/Genset';
+import { ModParts } from '../scene/ModParts';
 import { Box, Cyl, M } from '../scene/parts';
 import { GensetCtx, type GensetSource } from '../scene/source';
 import { create as createGenset } from '../sim/genset';
@@ -15,12 +16,13 @@ import { MAX_DPR } from '../scene/Adaptive';
 import { advanceEngine, engine, input, onEngineEvent, useBengkel } from './store';
 
 export const bcam = { current: null as ElementRef<typeof CameraControls> | null };
-export type BView = 'mesin' | 'turbo' | 'dyno' | 'sel';
+export type BView = 'mesin' | 'turbo' | 'dyno' | 'sel' | 'belakang';
 const VIEWS: Record<BView, [number[], number[]]> = {
   mesin: [[5.5, 3.6, 7.5], [0.2, 1.5, 0]],
   turbo: [[2.4, 3.6, 3.2], [0.74, 2.3, 0]],
   dyno: [[4.8, 2.0, 3.6], [2.2, 1.1, 0]],
   sel: [[9, 6.5, 10], [0, 1.5, 0]],
+  belakang: [[3.4, 3.0, -4.4], [-0.4, 1.4, -2.0]],
 };
 export const goB = (v: BView) => {
   const [p, t] = VIEWS[v];
@@ -35,24 +37,7 @@ const HOT_WHITE = new THREE.Color('#ffe2b0');
 function EngineModel() {
   const src = useMemo<GensetSource>(() => ({ s: createGenset(), shaft: { angle: 0 }, plant: false, bare: true, view: ASSEMBLED }), []);
   const g = useRef<THREE.Group>(null);
-  const turbos = useRef<THREE.Object3D[]>([]);
-  const cooler = useRef<THREE.Group>(null);
-  const pipes = useRef<THREE.Group>(null);
   const hole = useRef<THREE.Group>(null);
-  useLayoutEffect(() => {
-    const t: THREE.Object3D[] = [];
-    g.current!.traverse((o) => o.userData.part === 'turbo' && t.push(o));
-    turbos.current = t;
-  }, []);
-  // paint: the shared engine materials take the build's colour while in the workshop
-  useEffect(() => {
-    const teal = M.teal.color.clone();
-    const block = BLOCK.color.clone();
-    return () => {
-      M.teal.color.copy(teal);
-      BLOCK.color.copy(block);
-    };
-  }, []);
   useFrame(() => {
     const e = engine;
     const s = src.s;
@@ -62,13 +47,6 @@ function EngineModel() {
     s.genKw = e.power * 0.88;
     s.exhaust = e.egt;
     s.coolant = e.coolant;
-    M.teal.color.set(e.build.paint);
-    BLOCK.color.set(e.build.paint);
-    // turbo size
-    const k = TURBOS[e.build.turbo].scale;
-    turbos.current.forEach((o) => o.scale.setScalar(k));
-    cooler.current!.visible = e.build.intercooler === 'udara';
-    pipes.current!.visible = e.build.straight;
     hole.current!.visible = e.wrecked;
     // past ~780 °C the turbine housing goes from red to yellow-white
     if (e.egt > 780) M.hot.emissive.lerp(HOT_WHITE, Math.min(1, (e.egt - 780) / 200));
@@ -77,22 +55,7 @@ function EngineModel() {
     <GensetCtx.Provider value={src}>
       <group ref={g}>
         <Genset />
-        {/* front-mounted air-to-air intercooler core with its pipes */}
-        <group ref={cooler} position={[-2.15, 2.75, 0]}>
-          <Box s={[0.12, 0.8, 1.6]} m={M.silver} />
-          {Array.from({ length: 12 }, (_, i) => (
-            <Box key={i} s={[0.13, 0.02, 1.55]} m={M.steel} position={[0, -0.36 + i * 0.065, 0]} />
-          ))}
-          {[-1, 1].map((s) => (
-            <Cyl key={s} r={0.09} l={2.8} axis="x" m={M.silver} position={[1.45, 0.2, s * 0.55]} />
-          ))}
-        </group>
-        {/* straight-through pipes off the turbines */}
-        <group ref={pipes}>
-          {[-1, 1].map((s) => (
-            <Cyl key={s} r={0.13} l={1.6} m={M.chrome} position={[0.74, 3.3, s * 0.3]} />
-          ))}
-        </group>
+        <ModParts root={g} build={() => engine.build} boost={() => (engine.running ? engine.boost : 0)} />
         {/* the hole a rod leaves in the block */}
         <group ref={hole} visible={false} position={[-0.9, 1.15, 0.57]}>
           <mesh>

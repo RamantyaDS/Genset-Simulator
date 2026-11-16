@@ -15,6 +15,8 @@ import { FuelSystem } from './FuelSystem';
 import { Director, SkyLight, Weather } from './Weather';
 import { ThermalView } from './Thermal';
 import { Details, GensetRoom, ROOM_STACK } from './Dressing';
+import { ModParts } from './ModParts';
+import { loadFrac } from '../sim/genset';
 import { MAX_DPR } from './Adaptive';
 import { CylinderCutaway } from './Cylinder';
 import { HeatHaze, type HazeSources } from './HeatHaze';
@@ -59,6 +61,7 @@ function Intro() {
 
 export function Experience() {
   const hemi = useRef<THREE.HemisphereLight>(null);
+  const setGroup = useRef<THREE.Group>(null);
   const sun = useRef<THREE.DirectionalLight>(null);
   const view = useUI((s) => s.view);
   const silent = view === 'silent';
@@ -99,8 +102,14 @@ export function Experience() {
       </Environment>
 
       <Site panelAt={panelWorld} />
-      <group position={shift}>
+      <group position={shift} ref={setGroup}>
         <Genset />
+        <ModParts
+          root={setGroup}
+          build={() => sim.mod?.build ?? null}
+          boost={() => (sim.firing ? (sim.rpm / 1500) * (0.4 + 2.2 * Math.min(1.1, loadFrac(sim))) : 0)}
+          outside={!silent}
+        />
         <Details />
         <Flows />
         <TourHighlight />

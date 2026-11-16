@@ -15,6 +15,8 @@ export const RATING = {
 
 // Fuel use in L/h against fraction of prime power, from the Perkins 4016-61TRG3 datasheet (25/50/75%, base load,
 // prime, standby). No-load at rated speed is not published; 40 L/h is an estimate.
+import type { Build } from './dyno';
+
 export const FUEL_CURVE: [number, number][] = [
   [0, 40],
   [0.25, 126],
@@ -160,6 +162,7 @@ export interface State {
 /** What a workshop build changes on the set (from the dyno model at 1500 rpm). */
 export interface EngineMod {
   name: string;
+  build: Build; // the parts, for the 3D model
   kwe: number; // electrical output the engine can drive through the alternator
   bsfc: number; // fuel use relative to stock
   egt: number; // exhaust temperature change, °C

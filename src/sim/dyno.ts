@@ -43,10 +43,10 @@ export const STOCK: Build = {
 };
 
 export const TURBOS: Record<TurboSize, { label: string; boost: number; spool: number; lag: number; scale: number }> = {
-  kecil: { label: 'Kecil (cepat, tenaga terbatas)', boost: 1.9, spool: 900, lag: 0.4, scale: 0.8 },
-  standar: { label: 'Standar', boost: 2.6, spool: 1100, lag: 0.8, scale: 1 },
-  besar: { label: 'Besar', boost: 3.4, spool: 1350, lag: 1.5, scale: 1.25 },
-  jumbo: { label: 'Jumbo (lag besar)', boost: 4.3, spool: 1650, lag: 2.4, scale: 1.5 },
+  kecil: { label: '4 turbo kecil (cepat, tenaga terbatas)', boost: 1.9, spool: 900, lag: 0.4, scale: 0.85 },
+  standar: { label: '4 turbo standar', boost: 2.6, spool: 1100, lag: 0.8, scale: 1 },
+  besar: { label: '2 turbo besar', boost: 3.4, spool: 1350, lag: 1.5, scale: 1.4 },
+  jumbo: { label: '2 turbo jumbo (lag besar)', boost: 4.3, spool: 1650, lag: 2.4, scale: 1.6 },
 };
 
 export const IC: Record<Intercooler, { label: string; eff: number }> = {

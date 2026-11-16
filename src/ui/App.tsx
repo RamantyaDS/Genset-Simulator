@@ -430,7 +430,7 @@ export function App() {
       if (raw) {
         const b = JSON.parse(raw) as Build;
         const f = gensetFit(b);
-        sim.mod = { name: b.name, kwe: f.kwe, bsfc: f.bsfc, egt: f.egt, smoke: f.smoke };
+        sim.mod = { name: b.name, build: b, kwe: f.kwe, bsfc: f.bsfc, egt: f.egt, smoke: f.smoke };
       }
     } catch {
       /* no saved build */

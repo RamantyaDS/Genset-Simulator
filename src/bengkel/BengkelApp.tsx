@@ -78,7 +78,7 @@ function Mods() {
       <p className="b-note">
         Kapasitas <b>{disp.toFixed(1).replace('.', ',')} L</b> ({Math.round(disp * 1000).toLocaleString('id')} cc) · standar 61,1 L
       </p>
-      <Select<TurboSize> label="Turbo (2 buah)" value={b.turbo} options={(Object.keys(TURBOS) as TurboSize[]).map((k) => [k, TURBOS[k].label])} onChange={(v) => set({ turbo: v })} />
+      <Select<TurboSize> label="Turbo" value={b.turbo} options={(Object.keys(TURBOS) as TurboSize[]).map((k) => [k, TURBOS[k].label])} onChange={(v) => set({ turbo: v })} />
       <Select<Intercooler> label="Intercooler" value={b.intercooler} options={(Object.keys(IC) as Intercooler[]).map((k) => [k, IC[k].label])} onChange={(v) => set({ intercooler: v })} />
       <Slider label="Injektor" value={b.injector} min={1} max={1.6} step={0.05} fmt={(v) => `+${Math.round((v - 1) * 100)}%`} onChange={(v) => set({ injector: v })} />
       <Slider label="Peta ECU (solar)" value={b.map} min={0.9} max={1.4} step={0.05} fmt={(v) => (v < 1 ? 'hemat' : v === 1 ? 'standar' : `agresif +${Math.round((v - 1) * 100)}%`)} onChange={(v) => set({ map: v })} />
@@ -174,9 +174,34 @@ function Chart() {
   const { saved, compare } = useBengkel();
   useEffect(() => {
     let id = 0;
-    const draw = () => {
+    // estimated full-throttle curves (this build and stock), recomputed only when the build changes
+    const estimate = (b: Build) => {
+      const top = Math.min(2300, b.limiter || 2300);
+      const out: { rpm: number; kw: number; nm: number }[] = [];
+      for (let r = 800; r <= top; r += 50) {
+        const x = steady(b, r);
+        out.push({ rpm: r, kw: Math.max(0, x.power), nm: (Math.max(0, x.power) * 1000) / ((r * 2 * Math.PI) / 60) });
+      }
+      return out;
+    };
+    const stockCurve = estimate(STOCK);
+    let key = '';
+    let buildCurve = stockCurve;
+    const trail: { rpm: number; kw: number }[] = [];
+    let lastTrail = 0;
+    const draw = (now = 0) => {
       const c = ref.current;
       const g = c?.getContext('2d');
+      const k = JSON.stringify(engine.build);
+      if (k !== key) {
+        key = k;
+        buildCurve = estimate(engine.build);
+      }
+      if (engine.running && engine.dynoMode === 'bebas' && now - lastTrail > 60) {
+        lastTrail = now;
+        trail.push({ rpm: engine.rpm, kw: engine.power });
+        if (trail.length > 160) trail.shift();
+      }
       if (c && g) {
         const W = c.width;
         const H = c.height;
@@ -199,6 +224,24 @@ function Chart() {
         g.textAlign = 'right';
         for (let n = 0; n <= 24000; n += 8000) g.fillText(`${n / 1000}k Nm`, W - 2, yn(n) + 3);
         g.textAlign = 'left';
+        // estimates: stock in grey, this build in faint gold
+        const thin = (pts: { rpm: number; kw: number; nm: number }[], color: string) => {
+          g.strokeStyle = color;
+          g.lineWidth = 1.2;
+          g.setLineDash([]);
+          g.beginPath();
+          pts.forEach((p, i) => (i ? g.lineTo(x(p.rpm), yk(p.kw)) : g.moveTo(x(p.rpm), yk(p.kw))));
+          g.stroke();
+          g.setLineDash([3, 4]);
+          g.beginPath();
+          pts.forEach((p, i) => (i ? g.lineTo(x(p.rpm), yn(p.nm)) : g.moveTo(x(p.rpm), yn(p.nm))));
+          g.stroke();
+          g.setLineDash([]);
+        };
+        thin(stockCurve, 'rgba(160,170,165,0.55)');
+        thin(buildCurve, 'rgba(255,210,58,0.45)');
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        for (const t of trail) g.fillRect(x(t.rpm) - 1, yk(t.kw) - 1, 2, 2);
         const curves: { pts: { rpm: number; kw: number; nm: number }[]; color: string }[] = [];
         saved.filter((s) => compare.includes(s.id)).forEach((s, i) => curves.push({ pts: s.curve, color: CURVE_COLORS[(i + 1) % 4] }));
         if (engine.pull.points.length) curves.push({ pts: engine.pull.points, color: CURVE_COLORS[0] });
@@ -260,7 +303,10 @@ function Builds() {
     <section className="b-panel b-right">
       <h2>Dyno</h2>
       <Chart />
-      <p className="b-note">Garis penuh = tenaga (kW), putus-putus = torsi (Nm). Kuning = pull terakhir.</p>
+      <p className="b-note">
+        Garis penuh = tenaga (kW), putus-putus = torsi (Nm). Tipis abu-abu = perkiraan mesin standar, tipis kuning = perkiraan build ini, tebal kuning = hasil dyno
+        pull terakhir, titik putih = jejak saat digas. Tekan "Dyno pull" untuk hasil uji sebenarnya.
+      </p>
       <h2>Build tersimpan</h2>
       <button className="small" onClick={save}>
         💾 Simpan build ini
@@ -332,6 +378,7 @@ const VIEWS: [BView, string][] = [
   ['mesin', 'Mesin'],
   ['turbo', 'Turbo'],
   ['dyno', 'Dyno'],
+  ['belakang', 'Intercooler'],
   ['sel', 'Ruang uji'],
 ];
 
