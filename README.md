@@ -65,12 +65,13 @@ Simulator 3D genset 2250 kVA yang berjalan di browser. Bisa dicoba untuk melihat
 Tombol "🔧 Bengkel" (atau `?mode=bengkel`) memindahkan mesin Perkins 4016 dari alternatornya ke dinamometer rem air di ruang uji. Di genset putaran dikunci 1500 rpm, di sini mesin bebas digas.
 
 - Modifikasi: bore dan stroke (kapasitas sampai ±70 L), ukuran turbo (kecil sampai jumbo: makin besar makin bertenaga di atas tapi makin lag di bawah), intercooler (tanpa, udara ke udara, air ke udara), injektor, peta ECU, timing injeksi, knalpot lurus, radiator besar, pembatas putaran, dan warna mesin
+- Full custom: bore, stroke, boost dan rpm spool turbo custom, injektor, peta ECU, timing, pembatas putaran, kapasitas radiator, dan kVA alternator diisi angka bebas tanpa batas atas; komponen dalam forged (piston dan setang tempa, paking MLS, per katup kuat, sudu turbin Inconel) menaikkan batas kerusakan; preset Standar, Full modif, dan Monster
 - Gas dengan tombol GAS, tombol W/↑/spasi, atau throttle tetap; beban dyno bisa diatur
 - Dyno pull: gas penuh sementara dyno menaikkan putaran 900 rpm sampai batas, menghasilkan kurva tenaga dan torsi; build bisa disimpan dan dibandingkan (tersimpan di browser), dengan tiga tantangan: tenaga maksimal tanpa kerusakan, paling hemat di 1500 rpm, dan torsi terbesar di 1000 rpm
 - Gauge bengkel: boost, suhu gas buang, lambda, asap, tekanan silinder, air pendingin, konsumsi solar
 - Konsekuensi: solar berlebih membuat asap hitam, EGT di atas 760 °C merusak turbo (rumah turbo membara lalu putih, asap biru saat rusak), tekanan silinder atau air pendingin berlebih menjebol paking kepala silinder (uap putih), di atas 2100 rpm katup melayang, dan tanpa pembatas putaran setang piston putus menembus blok
 - Bentuk 3D ikut berubah (turbo lebih besar, intercooler depan, pipa knalpot lurus, warna) dan suara ikut berubah (siulan turbo yang nyaring mengikuti boost, knalpot lurus lebih galak, ketukan saat timing dimajukan)
-- Build bisa dipasang ke genset: tenaga mesin di 1500 rpm, konsumsi solar, suhu gas buang, dan asap ikut berubah di mode genset. Tenaga lebih dari 2000 kW tetap dibatasi alternator; build yang lemah tidak sanggup memikul beban penuh sehingga frekuensi turun. Ada catatan bahwa modifikasi bisa membuat genset gagal uji emisi dan menggugurkan garansi
+- Build bisa dipasang ke genset: tenaga mesin di 1500 rpm, konsumsi solar, suhu gas buang, dan asap ikut berubah di mode genset. Batas genset mengikuti yang lebih kecil antara tenaga mesin dan alternator yang dipasang (alternator bisa di-upgrade); build yang lemah tidak sanggup memikul beban penuh sehingga frekuensi turun. Ada catatan bahwa modifikasi bisa membuat genset gagal uji emisi dan menggugurkan garansi
 
 Model mesin adalah model rata-rata yang dikalibrasi ke ±2050 kW di 1500 rpm untuk mesin standar; angka hasil modifikasi adalah ilustrasi, bukan data Perkins.
 

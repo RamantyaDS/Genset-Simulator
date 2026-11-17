@@ -164,6 +164,7 @@ export interface EngineMod {
   name: string;
   build: Build; // the parts, for the 3D model
   kwe: number; // electrical output the engine can drive through the alternator
+  altPrimeKw: number; // prime rating of the fitted alternator
   bsfc: number; // fuel use relative to stock
   egt: number; // exhaust temperature change, °C
   smoke: number; // 0..1 visible smoke at full load
@@ -356,6 +357,8 @@ export const criticalPowered = (s: State) => normalPowered(s) || (s.upsOn && s.u
 
 export const hz = (s: State) => s.rpm / 30; // 4-pole alternator: f = rpm × 4 / 120
 export const loadFrac = (s: State) => s.genKw / RATING.primeKw;
+/** Prime rating the protections work to: the fitted alternator's, limited by what the engine can drive. */
+export const primeOf = (s: State) => (s.mod ? Math.min(s.mod.altPrimeKw, s.mod.kwe) : RATING.primeKw);
 export const genKva = (s: State) => s.genKw / RATING.pf;
 export const amps = (s: State) => (s.volts > 1 ? (genKva(s) * 1000) / (Math.sqrt(3) * s.volts) : 0);
 export const fuelRate = (s: State) => {
@@ -852,9 +855,9 @@ export function step(s: State, dt: number) {
   }
 
   // Overload protection.
-  if (s.genKw > RATING.primeKw) raise(s, 'overload');
+  if (s.genKw > primeOf(s)) raise(s, 'overload');
   else clear(s, 'overload');
-  if (s.genKw > RATING.primeKw * 1.1) {
+  if (s.genKw > primeOf(s) * 1.1) {
     s.overloadFor += dt;
     if (s.overloadFor >= TIMERS.overloadTrip) {
       raise(s, 'overloadTrip');

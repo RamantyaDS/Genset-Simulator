@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { displacement, gensetFit, IC, LIMITS, repair, startEngine, startPull, steady, STOCK, stopEngine, TURBOS, type Build, type Intercooler, type TurboSize } from '../sim/dyno';
+import { displacement, gensetFit, IC, LIMITS, limitsOf, repair, startEngine, startPull, steady, STOCK, stopEngine, TURBOS, type Build, type Intercooler, type TurboSize } from '../sim/dyno';
 import { initSound } from '../sound';
 import { useUI } from '../store';
 import { BengkelScene, goB, type BView } from './BengkelScene';
@@ -12,16 +12,17 @@ function Gauges() {
   useBengkel((s) => s.tick);
   const e = engine;
   const cls = (bad: boolean, warn: boolean) => (bad ? 'bad' : warn ? 'warn' : '');
+  const L = limitsOf(e.build);
   const g: [string, string, string][] = [
-    ['Putaran', `${Math.round(e.rpm)} rpm`, cls(e.rpm > LIMITS.valveFloat, e.build.limiter > 0 && e.rpm > e.build.limiter - 30)],
+    ['Putaran', `${Math.round(e.rpm)} rpm`, cls(e.rpm > L.valveFloat, e.build.limiter > 0 && e.rpm > e.build.limiter - 30)],
     ['Torsi', `${Math.round(e.torque).toLocaleString('id')} Nm`, ''],
     ['Tenaga', `${Math.round(e.power)} kW`, ''],
     ['Boost', `${e.boost.toFixed(2)} bar`, ''],
-    ['Suhu gas buang', `${Math.round(e.egt)} °C`, cls(e.egt > LIMITS.egtDamage, e.egt > LIMITS.egtWarn)],
+    ['Suhu gas buang', `${Math.round(e.egt)} °C`, cls(e.egt > L.egtDamage, e.egt > L.egtWarn)],
     ['Lambda', e.lambda > 8 ? '–' : e.lambda.toFixed(2), cls(e.lambda < 1.15, e.lambda < 1.4)],
     ['Asap', `${Math.round(e.smoke * 100)}%`, cls(e.smoke > 0.5, e.smoke > 0.2)],
-    ['Air pendingin', `${Math.round(e.coolant)} °C`, cls(e.coolant > LIMITS.coolantDamage, e.coolant > LIMITS.coolantWarn)],
-    ['Tekanan silinder', `${Math.round(e.pcp)} bar`, cls(e.pcp > LIMITS.pcpGasket, e.pcp > LIMITS.pcpGasket - 15)],
+    ['Air pendingin', `${Math.round(e.coolant)} °C`, cls(e.coolant > L.coolantDamage, e.coolant > L.coolantWarn)],
+    ['Tekanan silinder', `${Math.round(e.pcp)} bar`, cls(e.pcp > L.pcpGasket, e.pcp > L.pcpGasket - 15)],
     ['Solar', `${Math.round(e.fuelLph)} L/jam`, ''],
   ];
   return (
@@ -62,32 +63,128 @@ function Slider({ label, value, min, max, step, fmt, onChange }: { label: string
   );
 }
 
+/** A free number field (no upper limit) with a few quick picks underneath. */
+function Num({
+  label,
+  value,
+  unit,
+  min = 0,
+  step = 1,
+  quick = [],
+  onChange,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  min?: number;
+  step?: number;
+  quick?: [number, string][];
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="b-num">
+      <span>{label}</span>
+      <span className="b-num-in">
+        <input
+          type="number"
+          inputMode="decimal"
+          min={min}
+          step={step}
+          value={Number.isFinite(value) ? +value.toFixed(3) : 0}
+          onChange={(ev) => {
+            const v = parseFloat(ev.target.value);
+            if (Number.isFinite(v) && v >= min) onChange(v);
+          }}
+        />
+        <em>{unit}</em>
+      </span>
+      {quick.length > 0 && (
+        <span className="b-quick">
+          {quick.map(([v, l]) => (
+            <button key={l} type="button" className={`small ${Math.abs(value - v) < 1e-9 ? 'on' : ''}`} onClick={() => onChange(v)}>
+              {l}
+            </button>
+          ))}
+        </span>
+      )}
+    </label>
+  );
+}
+
+const FULL: Partial<Build> = {
+  name: 'Full modif',
+  bore: 164,
+  stroke: 200,
+  turbo: 'besar',
+  intercooler: 'udara',
+  injector: 1.35,
+  map: 1.15,
+  timing: 2,
+  straight: true,
+  radiatorKw: 2300,
+  limiter: 2000,
+  paint: '#b3261e',
+};
+const MONSTER: Partial<Build> = {
+  name: 'Monster',
+  bore: 200,
+  stroke: 240,
+  turbo: 'custom',
+  boost: 4.8,
+  spool: 1500,
+  intercooler: 'udara',
+  injector: 2.2,
+  map: 1,
+  timing: 1,
+  straight: true,
+  forged: true,
+  radiatorKw: 6000,
+  limiter: 2200,
+  altKva: 6000,
+  paint: '#1d1f22',
+};
+
 function Mods() {
   useBengkel((s) => s.tick);
   const b = engine.build;
   const set = (p: Partial<Build>) => Object.assign(engine.build, p);
   const disp = displacement(b);
   const spec = steady(b, 1500);
+  const fit = gensetFit(b);
   return (
     <aside className="b-panel b-left">
-      <h2>Modifikasi mesin</h2>
+      <h2>Modifikasi mesin · full custom</h2>
       <div className="b-row2">
-        <Select label="Bore" value={b.bore} options={[160, 162, 164, 166].map((v) => [v, `${v} mm${v === 160 ? ' (std)' : ''}`])} onChange={(v) => set({ bore: v })} />
-        <Select label="Stroke" value={b.stroke} options={[190, 195, 200, 205].map((v) => [v, `${v} mm${v === 190 ? ' (std)' : ''}`])} onChange={(v) => set({ stroke: v })} />
+        <Num label="Bore" unit="mm" min={50} value={b.bore} quick={[[160, 'std'], [166, '166'], [180, '180']]} onChange={(v) => set({ bore: v })} />
+        <Num label="Stroke" unit="mm" min={50} value={b.stroke} quick={[[190, 'std'], [205, '205'], [230, '230']]} onChange={(v) => set({ stroke: v })} />
       </div>
       <p className="b-note">
-        Kapasitas <b>{disp.toFixed(1).replace('.', ',')} L</b> ({Math.round(disp * 1000).toLocaleString('id')} cc) · standar 61,1 L
+        Kapasitas <b>{disp.toFixed(1).replace('.', ',')} L</b> ({Math.round(disp * 1000).toLocaleString('id')} cc, 16 silinder) · standar 61,1 L
       </p>
       <Select<TurboSize> label="Turbo" value={b.turbo} options={(Object.keys(TURBOS) as TurboSize[]).map((k) => [k, TURBOS[k].label])} onChange={(v) => set({ turbo: v })} />
+      {b.turbo === 'custom' && (
+        <div className="b-row2">
+          <Num label="Boost" unit="bar" min={0.3} step={0.1} value={b.boost ?? 2.6} quick={[[3.5, '3,5'], [5, '5']]} onChange={(v) => set({ boost: v })} />
+          <Num label="Spool penuh di" unit="rpm" min={700} step={50} value={b.spool ?? 1100} quick={[[1100, '1100'], [1500, '1500']]} onChange={(v) => set({ spool: v })} />
+        </div>
+      )}
       <Select<Intercooler> label="Intercooler" value={b.intercooler} options={(Object.keys(IC) as Intercooler[]).map((k) => [k, IC[k].label])} onChange={(v) => set({ intercooler: v })} />
-      <Slider label="Injektor" value={b.injector} min={1} max={1.6} step={0.05} fmt={(v) => `+${Math.round((v - 1) * 100)}%`} onChange={(v) => set({ injector: v })} />
-      <Slider label="Peta ECU (solar)" value={b.map} min={0.9} max={1.4} step={0.05} fmt={(v) => (v < 1 ? 'hemat' : v === 1 ? 'standar' : `agresif +${Math.round((v - 1) * 100)}%`)} onChange={(v) => set({ map: v })} />
-      <Slider label="Timing injeksi" value={b.timing} min={-2} max={6} step={1} fmt={(v) => (v === 0 ? 'standar' : `${v > 0 ? 'maju' : 'mundur'} ${Math.abs(v)}°`)} onChange={(v) => set({ timing: v })} />
+      <div className="b-row2">
+        <Num label="Injektor" unit="× std" min={0.5} step={0.05} value={b.injector} quick={[[1, 'std'], [1.5, '1,5×'], [2, '2×']]} onChange={(v) => set({ injector: v })} />
+        <Num label="Peta ECU" unit="× std" min={0.5} step={0.05} value={b.map} quick={[[1, 'std'], [1.15, '1,15×']]} onChange={(v) => set({ map: v })} />
+      </div>
+      <div className="b-row2">
+        <Num label="Timing (maju +)" unit="°" min={-10} step={1} value={b.timing} quick={[[0, 'std'], [3, '+3']]} onChange={(v) => set({ timing: v })} />
+        <Num label="Pembatas putaran" unit="rpm" min={0} step={100} value={b.limiter} quick={[[1800, 'std'], [0, 'mati']]} onChange={(v) => set({ limiter: v })} />
+      </div>
+      <div className="b-row2">
+        <Num label="Radiator" unit="kW panas" min={300} step={100} value={b.radiatorKw ?? (b.bigRadiator ? 2300 : 1450)} quick={[[1450, 'std'], [3000, '3000']]} onChange={(v) => set({ radiatorKw: v })} />
+        <Num label="Alternator" unit="kVA" min={500} step={250} value={b.altKva ?? 2250} quick={[[2250, 'std'], [3000, '3000']]} onChange={(v) => set({ altKva: v })} />
+      </div>
       <div className="b-row2">
         <Select label="Knalpot" value={b.straight ? 1 : 0} options={[[0, 'Standar'], [1, 'Lurus (straight pipe)']]} onChange={(v) => set({ straight: v === 1 })} />
-        <Select label="Radiator" value={b.bigRadiator ? 1 : 0} options={[[0, 'Standar'], [1, 'Besar']]} onChange={(v) => set({ bigRadiator: v === 1 })} />
+        <Select label="Komponen dalam" value={b.forged ? 1 : 0} options={[[0, 'Standar'], [1, 'Forged (diperkuat)']]} onChange={(v) => set({ forged: v === 1 })} />
       </div>
-      <Select label="Pembatas putaran" value={b.limiter} options={[[1800, '1800 rpm (std)'], [2000, '2000 rpm'], [2200, '2200 rpm'], [0, 'Mati (bahaya)']]} onChange={(v) => set({ limiter: v })} />
       <div className="b-paint">
         <span>Warna mesin</span>
         {PAINTS.map((c) => (
@@ -95,13 +192,14 @@ function Mods() {
         ))}
       </div>
       <p className="b-note">
-        Perkiraan di 1500 rpm gas penuh: <b>{Math.round(spec.power)} kW</b>, EGT {Math.round(spec.egt)} °C, lambda {spec.lambda.toFixed(2)}, asap {Math.round(spec.smoke * 100)}%.
+        Perkiraan di 1500 rpm gas penuh: <b>{Math.round(spec.power).toLocaleString('id')} kW</b>, EGT {Math.round(spec.egt)} °C, lambda {spec.lambda.toFixed(2)}, asap{' '}
+        {Math.round(spec.smoke * 100)}%, tekanan silinder {Math.round(spec.pcp)} bar (batas {Math.round(limitsOf(b).pcpGasket)}). Di genset: ±{Math.round(Math.min(fit.kwe, fit.altPrimeKw)).toLocaleString('id')}{' '}
+        kW prime ({fit.kwe > fit.altPrimeKw ? 'dibatasi alternator' : 'dibatasi mesin'}).
       </p>
       <div className="row">
-        <button onClick={() => Object.assign(engine.build, { ...STOCK, paint: b.paint })}>Kembali standar</button>
-        <button onClick={() => Object.assign(engine.build, { ...STOCK, name: 'Full modif', bore: 164, stroke: 200, turbo: 'besar', intercooler: 'udara', injector: 1.35, map: 1.15, timing: 2, straight: true, bigRadiator: true, limiter: 2000, paint: '#b3261e' })}>
-          Preset full modif
-        </button>
+        <button onClick={() => Object.assign(engine.build, { ...STOCK, paint: b.paint })}>Standar</button>
+        <button onClick={() => Object.assign(engine.build, { ...STOCK, ...FULL })}>Full modif</button>
+        <button onClick={() => Object.assign(engine.build, { ...STOCK, ...MONSTER })}>Monster</button>
       </div>
     </aside>
   );
@@ -176,7 +274,7 @@ function Chart() {
     let id = 0;
     // estimated full-throttle curves (this build and stock), recomputed only when the build changes
     const estimate = (b: Build) => {
-      const top = Math.min(2300, b.limiter || 2300);
+      const top = Math.min(3500, b.limiter || limitsOf(b).rodFail - 100);
       const out: { rpm: number; kw: number; nm: number }[] = [];
       for (let r = 800; r <= top; r += 50) {
         const x = steady(b, r);
@@ -207,22 +305,29 @@ function Chart() {
         const H = c.height;
         g.fillStyle = '#0b1210';
         g.fillRect(0, 0, W, H);
-        const x = (r: number) => 40 + ((W - 90) * (r - 800)) / (2300 - 800);
-        const yk = (k: number) => H - 22 - ((H - 34) * k) / 4800;
-        const yn = (n: number) => H - 22 - ((H - 34) * n) / 24000;
+        // axes grow with the biggest curve shown, so a monster build still fits
+        const shown = [buildCurve, engine.pull.points, ...saved.filter((sv) => compare.includes(sv.id)).map((sv) => sv.curve)];
+        const all = shown.flat();
+        const nice = (v: number, step: number, floor: number) => Math.max(floor, Math.ceil((v * 1.1) / step) * step);
+        const kMax = nice(Math.max(0, ...all.map((p) => p.kw)), 1200, 4800);
+        const nMax = nice(Math.max(0, ...all.map((p) => p.nm)), 8000, 24000);
+        const rMax = nice(Math.max(2300, ...all.map((p) => p.rpm)), 250, 2300);
+        const x = (r: number) => 40 + ((W - 90) * (r - 800)) / (rMax - 800);
+        const yk = (k: number) => H - 22 - ((H - 34) * k) / kMax;
+        const yn = (n: number) => H - 22 - ((H - 34) * n) / nMax;
         g.strokeStyle = '#1f2b26';
         g.fillStyle = '#7f8a85';
         g.font = '10px sans-serif';
-        for (let r = 800; r <= 2300; r += 250) {
+        for (let r = 800; r <= rMax; r += rMax > 3000 ? 500 : 250) {
           g.beginPath();
           g.moveTo(x(r), 10);
           g.lineTo(x(r), H - 22);
           g.stroke();
           g.fillText(String(r), x(r) - 12, H - 8);
         }
-        for (let k = 0; k <= 4800; k += 1200) g.fillText(`${k} kW`, 2, yk(k) + 3);
+        for (let k = 0; k <= kMax; k += kMax / 4) g.fillText(`${Math.round(k).toLocaleString('id')} kW`, 2, yk(k) + 3);
         g.textAlign = 'right';
-        for (let n = 0; n <= 24000; n += 8000) g.fillText(`${n / 1000}k Nm`, W - 2, yn(n) + 3);
+        for (let n = 0; n <= nMax; n += nMax / 3) g.fillText(`${Math.round(n / 1000)}k Nm`, W - 2, yn(n) + 3);
         g.textAlign = 'left';
         // estimates: stock in grey, this build in faint gold
         const thin = (pts: { rpm: number; kw: number; nm: number }[], color: string) => {
@@ -348,11 +453,11 @@ function Builds() {
       <h2>Pasang ke genset</h2>
       <p className="b-note">
         Di genset mesin dikunci 1500 rpm. Build ini memberi <b>{Math.round(fit.kw)} kWm</b> di poros, sekitar <b>{Math.round(fit.kwe)} kWe</b> setelah alternator.{' '}
-        {fit.kwe > 2000
-          ? 'Lebih dari batas alternator Stamford 2250 kVA (2000 kW standby): tenaga ekstra tidak bisa dipakai, alternator yang jadi pembatas.'
-          : fit.kwe < 1800
-            ? 'Kurang dari 1800 kW prime: genset tidak sanggup memikul beban penuh.'
-            : 'Masih dalam batas alternator.'}{' '}
+        {fit.kwe > fit.altPrimeKw * 1.1
+          ? `Lebih dari alternator ${Math.round(fit.altPrimeKw / 0.8).toLocaleString('id')} kVA (${Math.round(fit.altPrimeKw).toLocaleString('id')} kW prime): tenaga ekstra tidak terpakai, alternator yang jadi pembatas. Naikkan kVA alternator di atas.`
+          : fit.kwe < fit.altPrimeKw
+            ? `Alternator sanggup ${Math.round(fit.altPrimeKw).toLocaleString('id')} kW prime, tapi mesin hanya ±${Math.round(fit.kwe).toLocaleString('id')} kWe: mesin yang jadi pembatas.`
+            : 'Mesin dan alternator seimbang.'}{' '}
         Modifikasi juga bisa membuat genset tidak lolos uji emisi dan menggugurkan garansi pabrik.
       </p>
       <button

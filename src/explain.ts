@@ -1,5 +1,5 @@
 // Plain-language narration of what the genset and controller are doing right now.
-import { ALARMS, RATING, TIMERS, fuelRate, genAvailable, hz, loadFrac, type State } from './sim/genset';
+import { ALARMS, TIMERS, fuelRate, genAvailable, hz, loadFrac, primeOf, type State } from './sim/genset';
 
 export function explain(s: State): string {
   const alarm = s.alarms.find((a) => ALARMS[a].kind !== 'warning');
@@ -32,7 +32,9 @@ export function explain(s: State): string {
       if (s.loadBankOn && !s.gcb)
         return `Tes dengan load bank: genset menanggung ${Math.round(s.genKw)} kW ke kotak pemanas resistor (${Math.round(loadFrac(s) * 100)}%), sementara gedung tetap memakai PLN. Panasnya dibuang oleh kipas load bank. Cara ini membuktikan genset kuat menanggung beban tanpa mengganggu gedung.`;
       if (s.gcb) {
-        const lf = loadFrac(s);
+        // against the prime rating the set actually has (a fitted workshop build may raise it)
+        const prime = primeOf(s);
+        const lf = s.genKw / prime;
         const note =
           lf > 1.1
             ? 'Ini di atas batas aman. Kalau bertahan 5 detik, breaker akan trip.'
@@ -42,7 +44,7 @@ export function explain(s: State): string {
                 ? 'Beban berat tapi masih di zona prime.'
                 : 'Beban nyaman.';
         const test = s.mode === 'test' && s.mainsOk ? 'Mode Test: PLN sebenarnya masih ada, tapi beban gedung sengaja dipindah ke genset untuk menguji transfer. Tekan AUTO untuk mengembalikannya. ' : '';
-        return `${test}Genset menanggung ${Math.round(s.genKw)} kW (${Math.round(lf * 100)}% dari ${RATING.primeKw} kW prime). Frekuensi ${hz(s).toFixed(1)} Hz, solar ${Math.round(fuelRate(s))} liter/jam. ${note}`;
+        return `${test}Genset menanggung ${Math.round(s.genKw)} kW (${Math.round(lf * 100)}% dari ${Math.round(prime)} kW prime${s.mod ? ', mesin modifikasi' : ''}). Frekuensi ${hz(s).toFixed(1)} Hz, solar ${Math.round(fuelRate(s))} liter/jam. ${note}`;
       }
       if (s.mode === 'auto' && s.mainsOk) return `PLN sudah kembali. Panel menunggu ${TIMERS.returnDelay} detik (return delay) untuk memastikan PLN benar-benar stabil sebelum beban dipindah balik.`;
       if (s.mode === 'manual')

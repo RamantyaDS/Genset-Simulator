@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BULK_L, EXERCISE_S, TANK_L, TIMERS, callTanker, create, drainFuel, drainSeparator, startExercise, startIsoTest, fuelRate, genAvailable, hz, pressAuto, pressManual, pressStart, pressStop, pressTest, pressTransfer, setEStop, setMains, statusText, step, type State } from './genset';
+import { STOCK as STOCK_BUILD } from './dyno';
 
 const run = (s: State, seconds: number, dt = 0.05) => {
   for (let t = 0; t < seconds; t += dt) step(s, dt);
@@ -315,5 +316,26 @@ describe('ISO 8528 load acceptance', () => {
     const r = d.iso.results[0];
     expect(r.fDip).toBeGreaterThan(s.iso.results[0].fDip * 2);
     expect(['G2', 'G1']).toContain(r.cls);
+  });
+});
+
+describe('a fitted workshop build', () => {
+  it('a bigger alternator and engine carry a load that trips the stock set', () => {
+    const run2 = (s: State) => {
+      pressTest(s);
+      pressStart(s);
+      run(s, 60);
+      return s;
+    };
+    const stock = create();
+    stock.demandKw = 2400;
+    expect(run2(stock).alarms).toContain('overloadTrip');
+    const big = create();
+    big.demandKw = 2400;
+    big.mod = { name: 'Monster', build: { ...STOCK_BUILD }, kwe: 5800, altPrimeKw: 4800, bsfc: 1, egt: 0, smoke: 0 };
+    run2(big);
+    expect(big.alarms).not.toContain('overloadTrip');
+    expect(big.gcb).toBe(true);
+    expect(big.genKw).toBeCloseTo(2400, -1);
   });
 });

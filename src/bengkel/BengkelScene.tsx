@@ -10,7 +10,7 @@ import { ModParts, STRAIGHT_TOP } from '../scene/ModParts';
 import { Box, Cyl, M } from '../scene/parts';
 import { GensetCtx, type GensetSource } from '../scene/source';
 import { create as createGenset } from '../sim/genset';
-import { LIMITS, TURBOS } from '../sim/dyno';
+import { LIMITS, TURBOS, limitsOf, turboSpec } from '../sim/dyno';
 import { arcSound, playPlantEvent, soundSource, thunder, updateSound } from '../sound';
 import { MAX_DPR } from '../scene/Adaptive';
 import { advanceEngine, engine, input, onEngineEvent, useBengkel } from './store';
@@ -244,7 +244,8 @@ function Cell() {
   const warn = useRef<THREE.MeshStandardMaterial>(null);
   useFrame(({ clock }) => {
     const e = engine;
-    const bad = e.egt > LIMITS.egtWarn || e.rpm > LIMITS.valveFloat || e.coolant > LIMITS.coolantWarn || e.wrecked;
+    const L = limitsOf(e.build);
+    const bad = e.egt > L.egtWarn || e.rpm > L.valveFloat || e.coolant > L.coolantWarn || e.wrecked;
     warn.current!.emissiveIntensity = bad && Math.floor(clock.elapsedTime * 3) % 2 ? 3 : 0;
   });
   return (
@@ -296,9 +297,9 @@ function Driver() {
         coolant: 80,
         lf: Math.min(1.3, e.power / 2050),
         count: 1,
-        alarm: e.egt > LIMITS.egtWarn || e.rpm > LIMITS.valveFloat,
+        alarm: e.egt > limitsOf(e.build).egtWarn || e.rpm > limitsOf(e.build).valveFloat,
         boost: e.boost,
-        turboSize: TURBOS[e.build.turbo].scale,
+        turboSize: turboSpec(e.build).scale,
         straight: e.build.straight,
         knock: Math.max(0, Math.min(1, e.build.timing / 6)) * Math.min(1, e.power / 1500),
       };

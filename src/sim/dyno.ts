@@ -9,7 +9,7 @@
 // Damage accumulates past the limits: the turbo (exhaust temperature), the head gasket (peak cylinder pressure, coolant),
 // the valve train (over-speed: valve float) and finally a connecting rod (gross over-speed): the engine is wrecked.
 
-export type TurboSize = 'kecil' | 'standar' | 'besar' | 'jumbo';
+export type TurboSize = 'kecil' | 'standar' | 'besar' | 'jumbo' | 'custom';
 export type Intercooler = 'tidak' | 'udara' | 'air';
 
 export interface Build {
@@ -25,6 +25,12 @@ export interface Build {
   bigRadiator: boolean;
   limiter: number; // rev limiter, rpm (0 = off)
   paint: string;
+  // full-custom fields (older saved builds lack them: defaults below)
+  boost?: number; // custom turbo: boost, bar
+  spool?: number; // custom turbo: rpm at full boost
+  forged?: boolean; // forged pistons and rods, MLS head gasket, heavy valve springs, Inconel turbine wheels
+  radiatorKw?: number; // heat the radiator can reject, kW
+  altKva?: number; // alternator rating, kVA (stock Stamford P734H 2250 kVA)
 }
 
 export const STOCK: Build = {
@@ -40,6 +46,11 @@ export const STOCK: Build = {
   bigRadiator: false,
   limiter: 1800,
   paint: '#1f7f86',
+  boost: 2.6,
+  spool: 1100,
+  forged: false,
+  radiatorKw: 1450,
+  altKva: 2250,
 };
 
 export const TURBOS: Record<TurboSize, { label: string; boost: number; spool: number; lag: number; scale: number }> = {
@@ -47,13 +58,37 @@ export const TURBOS: Record<TurboSize, { label: string; boost: number; spool: nu
   standar: { label: '4 turbo standar', boost: 2.6, spool: 1100, lag: 0.8, scale: 1 },
   besar: { label: '2 turbo besar', boost: 3.4, spool: 1350, lag: 1.5, scale: 1.4 },
   jumbo: { label: '2 turbo jumbo (lag besar)', boost: 4.3, spool: 1650, lag: 2.4, scale: 1.6 },
+  custom: { label: 'Custom (isi boost & spool sendiri)', boost: 2.6, spool: 1100, lag: 0.8, scale: 1 },
 };
+
+/** The turbo actually fitted: a preset, or a custom one whose lag and size follow the boost and spool asked for. */
+export function turboSpec(b: Build) {
+  if (b.turbo !== 'custom') return TURBOS[b.turbo];
+  const boost = Math.max(0.3, b.boost ?? 2.6);
+  const spool = Math.max(700, b.spool ?? 1100);
+  return { label: TURBOS.custom.label, boost, spool, lag: 0.3 + 0.35 * boost + (spool - 900) / 900, scale: Math.min(2.2, 0.8 + 0.2 * boost) };
+}
+/** Big turbos are fitted one per bank instead of four. */
+export const twinTurbo = (b: Build) => b.turbo === 'besar' || b.turbo === 'jumbo' || (b.turbo === 'custom' && (b.boost ?? 2.6) > 3);
 
 export const IC: Record<Intercooler, { label: string; eff: number }> = {
   tidak: { label: 'Tanpa intercooler', eff: 0 },
   udara: { label: 'Udara ke udara', eff: 0.7 },
   air: { label: 'Air ke udara (standar)', eff: 0.82 },
 };
+
+/** Damage limits of a build: forged internals raise the mechanical ones a long way. */
+export function limitsOf(b: Build) {
+  const f = !!b.forged;
+  return {
+    ...LIMITS,
+    egtDamage: LIMITS.egtDamage + (f ? 90 : 0),
+    egtWarn: LIMITS.egtWarn + (f ? 90 : 0),
+    pcpGasket: LIMITS.pcpGasket * (f ? 1.7 : 1),
+    valveFloat: LIMITS.valveFloat + (f ? 600 : 0),
+    rodFail: LIMITS.rodFail + (f ? 900 : 0),
+  };
+}
 
 export const LIMITS = {
   egtWarn: 720, // °C before the turbine
@@ -135,11 +170,11 @@ export function steady(b: Build, rpm: number) {
 }
 
 const spoolFrac = (e: Engine) => {
-  const t = TURBOS[e.build.turbo];
+  const t = turboSpec(e.build);
   return Math.max(0, Math.min(1, (e.rpm - 600) / (t.spool - 600))) ** 1.5;
 };
 function targetBoost(e: Engine, fuelFrac: number) {
-  const t = TURBOS[e.build.turbo];
+  const t = turboSpec(e.build);
   const health = 1 - 0.85 * e.dmg.turbo;
   return t.boost * spoolFrac(e) * (0.25 + 0.75 * Math.min(1.2, fuelFrac)) * health * (e.build.straight ? 1.04 : 1);
 }
@@ -188,8 +223,8 @@ export function stopEngine(e: Engine) {
 /** Full-throttle sweep: the dyno holds the speed and walks it up while the torque is logged. */
 export function startPull(e: Engine) {
   if (!e.running || e.wrecked) return say(e, 'Nyalakan mesin dulu.');
-  const top = e.build.limiter || 2300;
-  e.pull = { active: true, from: 900, to: Math.min(top, 2300), points: [] };
+  const top = e.build.limiter || limitsOf(e.build).rodFail - 100;
+  e.pull = { active: true, from: 900, to: Math.min(top, 3500), points: [] };
   e.dynoMode = 'pull';
   e.rpm = 900;
   say(e, `Dyno pull: gas penuh, dyno menahan putaran dan menaikkannya perlahan dari 900 sampai ${e.pull.to} rpm.`);
@@ -227,9 +262,10 @@ export function stepEngine(e: Engine, dt: number) {
   if (e.rpm < idle) demand = Math.max(demand, Math.min(1, (idle - e.rpm) / 150) * 0.35);
   if (b.limiter && e.rpm > b.limiter) demand *= Math.max(0, 1 - (e.rpm - b.limiter) / 40);
   // valve float misses cycles
-  if (e.rpm > LIMITS.valveFloat && Math.random() < dt * 8) demand *= 0.3;
+  const L = limitsOf(b);
+  if (e.rpm > L.valveFloat && Math.random() < dt * 8) demand *= 0.3;
 
-  e.boost += (targetBoost(e, demand) - e.boost) * Math.min(1, dt / TURBOS[b.turbo].lag);
+  e.boost += (targetBoost(e, demand) - e.boost) * Math.min(1, dt / turboSpec(b).lag);
   const r = cycle(e, demand);
   e.lambda = r.lambda;
   e.chargeT = r.chargeT;
@@ -273,7 +309,7 @@ export function stepEngine(e: Engine, dt: number) {
 
   // cooling: about a quarter of the fuel energy goes to the jacket water
   const heat = 0.25 * (P_REF / ETA0) * (e.rpm / 1500) * r.fuel + (b.intercooler === 'air' ? 0.05 * (r.chargeT - AMB) * 10 : 0);
-  const cap = (b.bigRadiator ? 2300 : 1450) * Math.min(1, 0.3 + e.rpm / 1500);
+  const cap = (b.radiatorKw ?? (b.bigRadiator ? 2300 : 1450)) * Math.min(1, 0.3 + e.rpm / 1500);
   e.coolant += ((heat - cap) / 600) * dt * 0.6 + (e.coolant < 82 ? (82 - e.coolant) * dt * 0.02 * Math.min(1, heat / 400) : 0);
   if (heat < cap && e.coolant > 85) e.coolant -= dt * 0.8;
   if (e.steam > 0.5) e.coolant += dt * 0.6; // coolant blowing out through the gasket
@@ -281,11 +317,11 @@ export function stepEngine(e: Engine, dt: number) {
 
   // damage
   const d = e.dmg;
-  if (e.egt > LIMITS.egtDamage) d.turbo = Math.min(1, d.turbo + dt * 0.02 * ((e.egt - LIMITS.egtDamage) / 60) ** 1.5);
-  if (e.pcp > LIMITS.pcpGasket) d.gasket = Math.min(1, d.gasket + dt * 0.05 * ((e.pcp - LIMITS.pcpGasket) / 15));
-  if (e.coolant > LIMITS.coolantDamage) d.gasket = Math.min(1, d.gasket + dt * 0.03);
-  if (e.rpm > LIMITS.valveFloat) d.valves = Math.min(1, d.valves + dt * 0.08 * ((e.rpm - LIMITS.valveFloat) / 150));
-  if (e.rpm > LIMITS.rodFail - 120 * d.valves) d.rods = Math.min(1, d.rods + dt * 0.9);
+  if (e.egt > L.egtDamage) d.turbo = Math.min(1, d.turbo + dt * 0.02 * ((e.egt - L.egtDamage) / 60) ** 1.5);
+  if (e.pcp > L.pcpGasket) d.gasket = Math.min(1, d.gasket + dt * 0.05 * ((e.pcp - L.pcpGasket) / (15 * (b.forged ? 1.7 : 1))));
+  if (e.coolant > L.coolantDamage) d.gasket = Math.min(1, d.gasket + dt * 0.03);
+  if (e.rpm > L.valveFloat) d.valves = Math.min(1, d.valves + dt * 0.08 * ((e.rpm - L.valveFloat) / 150));
+  if (e.rpm > L.rodFail - 120 * d.valves) d.rods = Math.min(1, d.rods + dt * 0.9);
   if (d.turbo >= 1 && !e.events.includes('turboDead')) {
     e.events.push('turboDead');
     say(e, 'Turbo rusak: sudu turbin meleleh karena gas buang terlalu panas. Boost hilang, asap biru keluar (oli bocor ke turbo).');
@@ -311,6 +347,7 @@ export function gensetFit(b: Build) {
   return {
     kw: Math.max(0, mod.power),
     kwe: Math.max(0, mod.power) * 0.94, // through the alternator
+    altPrimeKw: (b.altKva ?? 2250) * 0.8, // alternator prime rating at 0.8 power factor
     bsfc: (mod.fuelLph / Math.max(1, mod.power)) / (ref.fuelLph / ref.power),
     egt: mod.egt - ref.egt,
     smoke: mod.smoke,

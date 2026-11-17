@@ -9,7 +9,7 @@ import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import * as THREE from 'three';
-import { TURBOS, type Build } from '../sim/dyno';
+import { TURBOS, twinTurbo, type Build } from '../sim/dyno';
 import { BLOCK } from './Genset';
 import { Box, Cyl, M } from './parts';
 
@@ -186,7 +186,7 @@ export function ModParts({
     else M.teal.color.copy(STOCK_TEAL);
     BLOCK.color.copy(M.teal.color);
     const size = b ? b.turbo : 'standar';
-    const twin = size === 'besar' || size === 'jumbo';
+    const twin = !!b && twinTurbo(b);
     // stock / small: the four stock turbos (slightly smaller for "kecil"); big: two big turbos, stock cleaners off
     turbos.current.forEach((o) => {
       o.visible = !twin;
@@ -194,7 +194,7 @@ export function ModParts({
     });
     if (cleaners.current) cleaners.current.visible = !twin;
     big.current!.visible = twin;
-    big.current!.scale.setScalar(size === 'jumbo' ? 1.2 : 1);
+    big.current!.scale.setScalar(size === 'jumbo' ? 1.2 : size === 'custom' && b ? Math.min(1.8, Math.max(1, 0.55 + 0.17 * (b.boost ?? 2.6))) : 1);
     big.current!.position.set(0.74 * (1 - big.current!.scale.x), 2.32 * (1 - big.current!.scale.x), 0);
     const ic = outside && !!b && b.intercooler === 'udara';
     cooler.current!.visible = ic;

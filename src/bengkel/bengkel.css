@@ -250,3 +250,47 @@
 .bengkel-start:hover:not(:disabled) {
   background: #a5481f;
 }
+
+.b-num {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 7px;
+  min-width: 0;
+}
+.b-num > span:first-child {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.b-num-in {
+  display: flex;
+  align-items: center;
+  background: #1a2026;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding-right: 6px;
+}
+.b-num-in input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 5px 6px;
+}
+.b-num-in em {
+  font-style: normal;
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.b-quick {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.b-quick button {
+  padding: 1px 7px;
+  font-size: 11px;
+}

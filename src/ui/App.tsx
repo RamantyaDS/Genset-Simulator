@@ -15,6 +15,7 @@ import {
   hoursLeft,
   hz,
   loadFrac,
+  primeOf,
   setEStop,
   setMains,
   startExercise,
@@ -94,7 +95,7 @@ function Controls() {
           aria-label="Beban gedung"
           type="range"
           min={0}
-          max={2400}
+          max={Math.max(2400, Math.ceil((primeOf(sim) * 1.25) / 100) * 100)}
           step={50}
           value={sim.demandKw}
           onChange={(e) => {
@@ -416,7 +417,12 @@ function ModBanner() {
       </button>
       <span>
         Mesin sanggup ±{Math.round(m.kwe)} kWe di 1500 rpm
-        {m.kwe > RATING.standbyKw ? ', tapi alternator tetap dibatasi 2000 kW standby' : m.kwe < RATING.primeKw ? ': tidak sanggup beban penuh, frekuensi akan turun' : ''} · solar{' '}
+        {m.kwe > m.altPrimeKw * 1.1
+          ? `, tapi alternator ${Math.round(m.altPrimeKw / 0.8)} kVA membatasi di ${Math.round(m.altPrimeKw)} kW prime`
+          : m.kwe < m.altPrimeKw
+            ? `: alternator sanggup ${Math.round(m.altPrimeKw)} kW, mesin yang jadi batas`
+            : ''}{' '}
+        · solar{' '}
         {m.bsfc >= 1 ? '+' : ''}
         {Math.round((m.bsfc - 1) * 100)}% per kWh · EGT {m.egt >= 0 ? '+' : ''}
         {Math.round(m.egt)} °C
@@ -446,7 +452,7 @@ export function App() {
       if (raw) {
         const b = JSON.parse(raw) as Build;
         const f = gensetFit(b);
-        sim.mod = { name: b.name, build: b, kwe: f.kwe, bsfc: f.bsfc, egt: f.egt, smoke: f.smoke };
+        sim.mod = { name: b.name, build: b, kwe: f.kwe, altPrimeKw: f.altPrimeKw, bsfc: f.bsfc, egt: f.egt, smoke: f.smoke };
       }
     } catch {
       /* no saved build */

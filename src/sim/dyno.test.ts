@@ -53,3 +53,18 @@ describe('engine on the dyno', () => {
     expect(gensetFit(FULL).kwe).toBeGreaterThan(2250);
   });
 });
+
+describe('full custom', () => {
+  it('forged internals stand cylinder pressure that blows a stock head gasket', () => {
+    const hot: Build = { ...STOCK, turbo: 'custom', boost: 4.8, injector: 2, bore: 190, stroke: 230 };
+    const a = createEngine(hot);
+    const b = createEngine({ ...hot, forged: true });
+    for (const e of [a, b]) {
+      startEngine(e);
+      run(e, 2);
+      startPull(e);
+      run(e, 14);
+    }
+    expect(a.dmg.gasket).toBeGreaterThan(b.dmg.gasket);
+  });
+});
