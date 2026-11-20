@@ -684,6 +684,22 @@ export function PlantScene() {
     <Canvas dpr={[1, Math.min(MAX_DPR, 1.75)]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [40, 40, 70], fov: 45, near: 0.5, far: 900 }}>
       <fog attach="fog" args={['#bcd4e6', 120, 420]} />
       <DayNight />
+      <PlantContent />
+      <EffectComposer>
+        <UnitHaze />
+        <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
+      </EffectComposer>
+    </Canvas>
+  );
+}
+
+/**
+ * The plant, the palm oil complex and its effects, without lights, fog or post effects. The Traknus World mounts this
+ * as one zone; `drive` is false there while the player walks around (the orbit camera only runs while operating).
+ */
+export function PlantContent({ drive = true }: { drive?: boolean }) {
+  return (
+    <>
       <Grounds />
       <Hall />
       {UNIT_X.map((x, i) => (
@@ -704,13 +720,13 @@ export function PlantScene() {
       <Yard />
       <Line20kV />
       <Complex />
-      <CameraControls ref={(c) => (cams.current = c)} makeDefault minDistance={3} maxDistance={260} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
-      <Intro />
+      {drive && (
+        <>
+          <CameraControls ref={(c) => (cams.current = c)} makeDefault minDistance={3} maxDistance={260} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
+          <Intro />
+        </>
+      )}
       <Driver />
-      <EffectComposer>
-        <UnitHaze />
-        <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
-      </EffectComposer>
-    </Canvas>
+    </>
   );
 }

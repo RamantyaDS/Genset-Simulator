@@ -1,3 +1,4 @@
+import { EMBED } from '../embed';
 import { useEffect, useRef, useState } from 'react';
 import { initSound } from '../sound';
 import {
@@ -906,9 +907,6 @@ const CAMS: [PlantCam, string][] = [
 let introSeen = false;
 
 export function PlantApp() {
-  const inspect = usePlant((s) => s.inspect);
-  const cam = usePlant((s) => s.cam);
-  const hideUi = usePlant((s) => s.hideUi);
   const [intro, setIntro] = useState(!introSeen);
   useEffect(() => {
     document.body.classList.add('plant-mode');
@@ -922,32 +920,7 @@ export function PlantApp() {
   return (
     <>
       <PlantScene />
-      <header className="brand" style={hideUi ? { display: 'none' } : undefined}>
-        <h1>PLTD Kawasan Sawit</h1>
-        <p>{UNITS} × genset 2250 kVA · paralel · 20 kV</p>
-        <button className="tour-start" onClick={() => useUI.getState().set({ mode: 'single' })}>
-          ← Genset tunggal
-        </button>
-      </header>
-      {!hideUi && (
-        <>
-          <TopBar />
-          <Units />
-          {inspect ? (
-            <>
-              <UnitDetail />
-              <PartCard />
-            </>
-          ) : (
-            <>
-              <SyncPanel />
-              <Feeders />
-              <Chart />
-              <Narration />
-            </>
-          )}
-        </>
-      )}
+      <PlantHud />
       {intro && (
         <div className="intro">
           <div>
@@ -973,6 +946,45 @@ export function PlantApp() {
             </button>
           </div>
         </div>
+      )}
+    </>
+  );
+}
+
+/** Everything on screen over the plant; the Traknus World shows this while the player runs the power plant. */
+export function PlantHud() {
+  const inspect = usePlant((s) => s.inspect);
+  const cam = usePlant((s) => s.cam);
+  const hideUi = usePlant((s) => s.hideUi);
+  return (
+    <>
+      <header className="brand" style={hideUi ? { display: 'none' } : undefined}>
+        <h1>PLTD Kawasan Sawit</h1>
+        <p>{UNITS} × genset 2250 kVA · paralel · 20 kV</p>
+        {!EMBED.on && (
+          <button className="tour-start" onClick={() => useUI.getState().set({ mode: 'single' })}>
+            ← Genset tunggal
+          </button>
+        )}
+      </header>
+      {!hideUi && (
+        <>
+          <TopBar />
+          <Units />
+          {inspect ? (
+            <>
+              <UnitDetail />
+              <PartCard />
+            </>
+          ) : (
+            <>
+              <SyncPanel />
+              <Feeders />
+              <Chart />
+              <Narration />
+            </>
+          )}
+        </>
       )}
       <div className="p-cams">
         {cam === 'control' && (

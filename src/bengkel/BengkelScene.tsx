@@ -1,5 +1,6 @@
 // The engine test cell: the 4016 on its stand with the dynamometer on the flywheel, the exhaust extraction hood, and the
 // effects of what the build does: soot or steam from the outlet, a glowing turbo, and the end of an over-revved engine.
+import { EMBED } from '../embed';
 import { CameraControls, Environment, Lightformer, Text } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
@@ -319,6 +320,7 @@ function Driver() {
   useEffect(() => {
     const keys = ['w', 'W', 'ArrowUp', ' '];
     const down = (e: KeyboardEvent) => {
+      if (!EMBED.input) return;
       if (keys.includes(e.key) && !(e.target instanceof HTMLInputElement)) {
         input.held = true;
         e.preventDefault();
@@ -348,6 +350,29 @@ function Intro() {
   return null;
 }
 
+/**
+ * The test cell, the engine and the dyno, without lights or post effects. The Traknus World mounts this as one zone;
+ * `drive` is false there while the player walks around (the orbit camera only runs at the dyno).
+ */
+export function BengkelContent({ drive = true }: { drive?: boolean }) {
+  return (
+    <>
+      <Cell />
+      <EngineModel />
+      <Dyno />
+      <Plume />
+      <RodFailure />
+      {drive && (
+        <>
+          <CameraControls ref={(c) => (bcam.current = c)} makeDefault minDistance={1.5} maxDistance={20} maxPolarAngle={Math.PI * 0.49} smoothTime={0.6} />
+          <Intro />
+        </>
+      )}
+      <Driver />
+    </>
+  );
+}
+
 export function BengkelScene() {
   return (
     <Canvas shadows dpr={[1, MAX_DPR]} camera={{ position: [12, 7, 12], fov: 40, near: 0.1, far: 120 }}>
@@ -358,14 +383,7 @@ export function BengkelScene() {
         <Lightformer form="rect" intensity={2} position={[0, 8, -6]} scale={[14, 5, 1]} color="#dfe8f5" />
         <Lightformer form="circle" intensity={3} position={[6, 9, 6]} scale={3} />
       </Environment>
-      <Cell />
-      <EngineModel />
-      <Dyno />
-      <Plume />
-      <RodFailure />
-      <CameraControls ref={(c) => (bcam.current = c)} makeDefault minDistance={1.5} maxDistance={20} maxPolarAngle={Math.PI * 0.49} smoothTime={0.6} />
-      <Intro />
-      <Driver />
+      <BengkelContent />
       <EffectComposer>
         <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
       </EffectComposer>

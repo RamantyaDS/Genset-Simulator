@@ -1,3 +1,4 @@
+import { EMBED } from '../embed';
 import { useEffect, useRef } from 'react';
 import { displacement, gensetFit, IC, LIMITS, limitsOf, repair, startEngine, startPull, steady, STOCK, stopEngine, TURBOS, type Build, type Intercooler, type TurboSize } from '../sim/dyno';
 import { initSound } from '../sound';
@@ -488,7 +489,6 @@ const VIEWS: [BView, string][] = [
 ];
 
 export function BengkelApp() {
-  const hideUi = useBengkel((s) => s.hideUi);
   useEffect(() => {
     document.body.classList.add('bengkel-mode');
     const go = () => initSound();
@@ -519,12 +519,24 @@ export function BengkelApp() {
   return (
     <>
       <BengkelScene />
+      <BengkelHud />
+    </>
+  );
+}
+
+/** Everything on screen over the workshop; the Traknus World shows this while the player is at the dyno. */
+export function BengkelHud() {
+  const hideUi = useBengkel((s) => s.hideUi);
+  return (
+    <>
       <header className="brand" style={hideUi ? { display: 'none' } : undefined}>
         <h1>Bengkel & Dyno</h1>
         <p>Perkins 4016 · modifikasi dan uji tenaga</p>
-        <button className="tour-start" onClick={() => useUI.getState().set({ mode: 'single' })}>
-          ← Genset tunggal
-        </button>
+        {!EMBED.on && (
+          <button className="tour-start" onClick={() => useUI.getState().set({ mode: 'single' })}>
+            ← Genset tunggal
+          </button>
+        )}
       </header>
       {!hideUi && (
         <>

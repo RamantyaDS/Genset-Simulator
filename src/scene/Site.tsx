@@ -12,7 +12,7 @@ import { useWetGround } from './Weather';
 
 import { ATS_POS, POLE_POS } from './sitePos';
 export { ATS_POS, POLE_POS };
-const BUILDING = { x: -1, z: -24, w: 24, h: 13, d: 10 };
+export const BUILDING = { x: -1, z: -24, w: 24, h: 13, d: 10 };
 
 export const buildingPowered = () => normalPowered(sim);
 

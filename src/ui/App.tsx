@@ -1,3 +1,4 @@
+import { EMBED } from '../embed';
 import { useEffect, useState } from 'react';
 import { Experience } from '../scene/Experience';
 import { goTo, setInset, type Preset } from '../scene/camera';
@@ -446,6 +447,36 @@ function ModBanner() {
 
 export function App() {
   const [started, setStarted] = useState(false);
+  return (
+    <>
+      <Experience />
+      <Hud />
+      {!started && (
+        <div className="intro">
+          <div>
+            <h1>Simulator Genset 2250 kVA</h1>
+            <p>
+              Lihat bagaimana genset menyalakan dirinya sendiri saat listrik PLN padam, dari starter sampai mengambil beban gedung. Mesin 16
+              silinder, 61 liter, 1800 kW.
+            </p>
+            <button
+              className="big ok"
+              onClick={() => {
+                initSound();
+                setStarted(true);
+              }}
+            >
+              Mulai (suara aktif)
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Everything on screen over the 3D view; the Traknus World shows this while the player operates the standby set. */
+export function Hud() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem('genset-fit');
@@ -484,7 +515,6 @@ export function App() {
   }, [panelOpen, tour]);
   return (
     <>
-      <Experience />
       <button className={`small hide-ui ${hideUi ? '' : 'on'}`} onClick={() => useUI.getState().set({ hideUi: !hideUi })} title="Sembunyikan atau tampilkan panel">
         👁 Panel
       </button>
@@ -496,7 +526,7 @@ export function App() {
             ▶ Cara kerja genset
           </button>
         )}
-        {tour === null && (
+        {tour === null && !EMBED.on && (
           <button
             className="tour-start plant-start"
             onClick={() => {
@@ -507,7 +537,7 @@ export function App() {
             ⚡ Mode pembangkit 5 unit
           </button>
         )}
-        {tour === null && (
+        {tour === null && !EMBED.on && (
           <button
             className="tour-start plant-start bengkel-start"
             onClick={() => {
@@ -534,26 +564,6 @@ export function App() {
       {scopeOpen && <Scope onClose={() => useUI.getState().set({ scopeOpen: false })} />}
       {thermal && <ThermalCard />}
       {cylinder && <CylinderCard />}
-      {!started && (
-        <div className="intro">
-          <div>
-            <h1>Simulator Genset 2250 kVA</h1>
-            <p>
-              Lihat bagaimana genset menyalakan dirinya sendiri saat listrik PLN padam, dari starter sampai mengambil beban gedung. Mesin 16
-              silinder, 61 liter, 1800 kW.
-            </p>
-            <button
-              className="big ok"
-              onClick={() => {
-                initSound();
-                setStarted(true);
-              }}
-            >
-              Mulai (suara aktif)
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }

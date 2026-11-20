@@ -59,26 +59,77 @@ function Intro() {
   return null;
 }
 
-export function Experience() {
-  const hemi = useRef<THREE.HemisphereLight>(null);
+/**
+ * The site, the genset and its effects, without fog, lights or post effects. The Traknus World mounts this as one zone
+ * (the office building's standby set); `drive` is false there while the player walks around: the orbit camera, the
+ * cinematic director and the framing of the intro only run while the player operates the set.
+ */
+export function ZoneContent({ drive = true }: { drive?: boolean }) {
   const setGroup = useRef<THREE.Group>(null);
-  const sun = useRef<THREE.DirectionalLight>(null);
   const view = useUI((s) => s.view);
   const silent = view === 'silent';
   const shift: [number, number, number] = silent ? [SILENT_SHIFT, CANOPY.base, 0] : [0, 0, 0];
-  // Hot air: exhaust rises and drifts downwind; radiator air blows out of the radiator face (or the canopy's louvred end).
   const room = useUI((s) => s.room) && !silent;
-  const hq = useUI((s) => s.hq);
   const stack: [number, number, number] = silent ? SILENT_STACK : room ? ROOM_STACK : [0.74, 2.62, 0];
   // a fitted straight-pipe build: the smoke leaves from the tops of its two pipes (not in the canopy or the room)
   const straightOut = () => !silent && !room && !!sim.mod?.build.straight;
+  const panelWorld: [number, number, number] = [PANEL_POS[0] + shift[0], PANEL_POS[1] + shift[1], PANEL_POS[2]];
+  return (
+    <>
+      <Site panelAt={panelWorld} />
+      <group position={shift} ref={setGroup}>
+        <Genset />
+        <ModParts
+          root={setGroup}
+          build={() => sim.mod?.build ?? null}
+          boost={() => (sim.firing ? (sim.rpm / 1500) * (0.4 + 2.2 * Math.min(1.1, loadFrac(sim))) : 0)}
+          outside={!silent}
+          straightOk={!silent && !room}
+        />
+        <Details />
+        <Flows />
+        <TourHighlight />
+      </group>
+      {silent && <Canopy />}
+      <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
+      <FocusHighlight />
+      <GensetRoom />
+      <ThermalView />
+      <CylinderCutaway />
+      <Weather />
+      <FuelSystem />
+      <Smoke
+        key={`${view}${room}`}
+        at={() => (straightOut() ? [0.74, STRAIGHT_TOP, Math.random() < 0.5 ? 0.3 : -0.3] : stack)}
+      />
+
+      {drive && <Director />}
+      {drive && (
+        <>
+          <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={80} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
+          <Intro />
+        </>
+      )}
+      <Driver />
+    </>
+  );
+}
+
+export function Experience() {
+  const hemi = useRef<THREE.HemisphereLight>(null);
+  const sun = useRef<THREE.DirectionalLight>(null);
+  const view = useUI((s) => s.view);
+  const silent = view === 'silent';
+  const room = useUI((s) => s.room) && !silent;
+  const hq = useUI((s) => s.hq);
+  const stack: [number, number, number] = silent ? SILENT_STACK : room ? ROOM_STACK : [0.74, 2.62, 0];
+  // hot air: exhaust rises and drifts downwind; radiator air blows out of the radiator face (or the canopy's louvred end)
   const haze: HazeSources = {
     exhaust: { from: stack, to: [stack[0] + 0.9, stack[1] + 3.2, stack[2]], width: 0.45 },
     radiator: silent
       ? { from: [-6.15, 1.6, 0], to: [-7.6, 2.6, 0], width: 1.1 }
       : { from: [-2.9, 1.4, 0], to: [-4.3, 2.3, 0], width: 0.95 },
   };
-  const panelWorld: [number, number, number] = [PANEL_POS[0] + shift[0], PANEL_POS[1] + shift[1], PANEL_POS[2]];
   return (
     <Canvas shadows dpr={[1, MAX_DPR]} onPointerMissed={() => useUI.getState().set({ focus: null })} camera={{ position: [18, 10, 20], fov: 40, near: 0.1, far: 200 }}>
       <fog attach="fog" args={["#1b2532", 40, 150]} />
@@ -103,38 +154,8 @@ export function Experience() {
         <Lightformer form="circle" intensity={3} position={[6, 9, 6]} scale={3} />
       </Environment>
 
-      <Site panelAt={panelWorld} />
-      <group position={shift} ref={setGroup}>
-        <Genset />
-        <ModParts
-          root={setGroup}
-          build={() => sim.mod?.build ?? null}
-          boost={() => (sim.firing ? (sim.rpm / 1500) * (0.4 + 2.2 * Math.min(1.1, loadFrac(sim))) : 0)}
-          outside={!silent}
-          straightOk={!silent && !room}
-        />
-        <Details />
-        <Flows />
-        <TourHighlight />
-      </group>
-      {silent && <Canopy />}
-      <LoadBank at={[panelWorld[0] + (silent ? 4.2 : 2.6), 0, 2.6]} panelAt={silent ? [panelWorld[0], 0.3, 1.3] : panelWorld} />
-      <FocusHighlight />
-      <GensetRoom />
       <SkyLight hemi={hemi} sun={sun} />
-      <ThermalView />
-      <CylinderCutaway />
-      <Weather />
-      <Director />
-      <FuelSystem />
-      <Smoke
-        key={`${view}${room}`}
-        at={() => (straightOut() ? [0.74, STRAIGHT_TOP, Math.random() < 0.5 ? 0.3 : -0.3] : stack)}
-      />
-
-      <CameraControls ref={controls} makeDefault minDistance={1.5} maxDistance={80} maxPolarAngle={Math.PI * 0.48} smoothTime={0.7} />
-      <Intro />
-      <Driver />
+      <ZoneContent />
       <EffectComposer>
         {hq ? <N8AO aoRadius={1.2} intensity={2.2} distanceFalloff={0.6} halfRes quality="performance" aoSamples={10} denoiseSamples={4} /> : <></>}
         <HeatHaze sources={haze} />
