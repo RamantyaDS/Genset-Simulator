@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { FocusHighlight } from '../scene/FocusHighlight';
 import { HeatHaze, type HazeSources } from '../scene/HeatHaze';
 import { Box, Cyl, M } from '../scene/parts';
+import { KitMesh, buildFuelTanker } from '../scene/truckKit';
 import { useUI } from '../store';
 import { busLive, PRIME_KW } from '../sim/plant';
 import { playPlantEvent, soundSource, updateSound } from '../sound';
@@ -376,9 +377,9 @@ function Yard() {
       <Box s={[14, 0.8, 26]} m={M.base} position={[-42, 0.4, 1]} visible={false} />
       <Cyl r={1} l={3} axis="x" m={M.white} position={[-31, 1.6, -6]} />
       <group ref={truck} position={[-33, 0, 16]} visible={false}>
-        <Box s={[2.4, 2.4, 2.2]} r={0.1} m={M.red} position={[0, 1.5, 3.2]} />
-        <Cyl r={1.1} l={6} axis="z" m={M.chrome} position={[0, 1.9, -1]} />
-        {[-2.8, -0.8, 1.2, 3.2].map((z) => [-1, 1].map((s) => <Cyl key={`${z}${s}`} r={0.5} l={0.3} axis="x" m={M.rubber} position={[s * 1.05, 0.5, z]} />))}
+        <group position={[0, 0, 3.2]}>
+          <KitMesh build={buildFuelTanker} />
+        </group>
       </group>
     </group>
   );

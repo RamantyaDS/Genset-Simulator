@@ -9,6 +9,7 @@ import { BULK_L, TANK_L } from '../sim/genset';
 import { sim } from '../store';
 import { Box, Cyl, M } from './parts';
 import { Flow } from './Site';
+import { KitMesh, buildFuelTanker } from './truckKit';
 
 const DAY: [number, number, number] = [-1.6, 0, 3.1];
 const BULK: [number, number, number] = [-7.5, 0, 5.5];
@@ -72,19 +73,15 @@ function Separator() {
   );
 }
 
+/** The fuel tanker that refills the bulk tank: 6×4 cab-over with an 8 kL aluminium tank (truck kit, forward +x). */
 function Tanker() {
   const g = useRef<THREE.Group>(null);
   useFrame(() => (g.current!.visible = sim.truckIn >= 0));
   return (
     <group ref={g} visible={false} position={[BULK[0] - 7.2, 0, BULK[2] + 1.6]}>
-      <Box s={[2.4, 2.2, 2.3]} m={M.white} position={[3.6, 1.5, 0]} />
-      <Box s={[2.3, 0.9, 2.3]} m={M.black} position={[3.6, 2.2, 0]} />
-      <Cyl r={1.1} l={6} axis="x" m={M.silver} position={[-0.6, 1.9, 0]} />
-      <Box s={[7.5, 0.3, 2]} m={M.cast} position={[0.4, 0.75, 0]} />
-      {[-2.6, -1.2, 3.6].map((x) => [-1, 1].map((sz) => <Cyl key={`${x}${sz}`} r={0.5} l={0.35} axis="z" m={M.rubber} position={[x, 0.5, sz * 1]} />))}
-      <Text position={[-0.6, 2.2, 1.12]} fontSize={0.35} color="#c3141c">
-        SOLAR
-      </Text>
+      <group position={[3.6, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <KitMesh build={buildFuelTanker} />
+      </group>
     </group>
   );
 }
